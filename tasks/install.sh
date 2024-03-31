@@ -1,0 +1,1 @@
+wget -r -H -N --cut-dirs=2 --content-disposition -I "/v1/" "https://swiftbrowser.dkrz.de/tcl_objects/2024-06-12T13:45:08Z/r_6161620c85573dd56f2ce855e82f2976b2ee9341/w_/dkrz_ab6243f85fe24767bb1508712d1eb504/ISC24_SCC/0/?show_all"
