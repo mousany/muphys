@@ -75,11 +75,7 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
   array_2d_t<size_t> kmin(
       nvec, array_1d_t<size_t>(np)); // first level with condensate
 
-  real_t cv, vc, eta, zeta, qvsi, qice, qliq, qtot, dvsw, dvsw0, dvsi, n_ice,
-      m_ice, x_ice, n_snow, l_snow, ice_dep, e_int, stot, xrho;
-
-  real_t update[3], // scratch array with output from precipitation step
-      sink[nx],     // tendencies
+  real_t sink[nx],     // tendencies
       dqdt[nx];     // tendencies
   array_1d_t<real_t> eflx(
       nvec); // internal energy flux from precipitation (W/m2 )
@@ -145,10 +141,13 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     iv = ind_i[j];
     oned_vec_index = k * ivend + iv;
 
+    real_t dvsw;
     dvsw = q[lqv].x[oned_vec_index] -
            qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
+    real_t qvsi, dvsi;
     qvsi = qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index]);
     dvsi = q[lqv].x[oned_vec_index] - qvsi;
+    real_t n_snow, l_snow;
     n_snow = snow_number(t[oned_vec_index], rho[oned_vec_index],
                          q[lqs].x[oned_vec_index]);
     l_snow = snow_lambda(rho[oned_vec_index], q[lqs].x[oned_vec_index], n_snow);
@@ -168,7 +167,9 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
         cloud_to_graupel(t[oned_vec_index], rho[oned_vec_index],
                          q[lqc].x[oned_vec_index], q[lqg].x[oned_vec_index]);
 
+    real_t ice_dep,eta;
     if (t[oned_vec_index] < tmelt) {
+      real_t n_ice, m_ice, x_ice;
       n_ice = ice_number(t[oned_vec_index], rho[oned_vec_index]);
       m_ice = ice_mass(q[lqi].x[oned_vec_index], n_ice);
       x_ice = ice_sticking(t[oned_vec_index]);
@@ -211,6 +212,7 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     }
 
     if (is_sig_present[j]) {
+      real_t dvsw0;
       dvsw0 = q[lqv].x[oned_vec_index] - qsat_rho(tmelt, rho[oned_vec_index]);
       sx2x[lqv][lqs] =
           vapor_x_snow(t[oned_vec_index], p[oned_vec_index],
@@ -239,6 +241,7 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
         for (size_t i = 0; i < nx; i++) {
           sink[qx_ind[ix]] = sink[qx_ind[ix]] + sx2x[qx_ind[ix]][i];
         }
+        real_t stot;
         stot = q[qx_ind[ix]].x[oned_vec_index] / dt;
 
         if ((sink[qx_ind[ix]] > stot) &&
@@ -264,6 +267,7 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
           0.0, q[qx_ind[ix]].x[oned_vec_index] + dqdt[qx_ind[ix]] * dt);
     }
 
+    real_t qliq,qice,qtot,cv;
     qice = q[lqs].x[oned_vec_index] + q[lqi].x[oned_vec_index] +
            q[lqg].x[oned_vec_index];
     qliq = q[lqc].x[oned_vec_index] + q[lqr].x[oned_vec_index];
@@ -295,10 +299,12 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 
       kp1 = std::min(ke - 1, k + 1);
       if (k >= *std::min_element(kmin[iv].begin(), kmin[iv].end())) {
+        real_t qliq,qice;
         qliq = q[lqc].x[oned_vec_index] + q[lqr].x[oned_vec_index];
         qice = q[lqs].x[oned_vec_index] + q[lqi].x[oned_vec_index] +
                q[lqg].x[oned_vec_index];
 
+        real_t e_int,zeta,xrho;
         e_int =
             internal_energy(t[oned_vec_index], q[lqv].x[oned_vec_index], qliq,
                             qice, rho[oned_vec_index], dz[oned_vec_index]) +
@@ -308,9 +314,11 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 
         for (size_t ix = 0; ix < np; ix++) {
           if (k >= kmin[iv][qp_ind[ix]]) {
+            real_t vc;
             vc = vel_scale_factor(qp_ind[ix], xrho, rho[oned_vec_index],
                                   t[oned_vec_index],
                                   q[qp_ind[ix]].x[oned_vec_index]);
+            real_t update[3]; // scratch array with output from precipitation step
             precip(params[qp_ind[ix]], update, zeta, vc, q[qp_ind[ix]].p[iv],
                    vt[iv][ix], q[qp_ind[ix]].x[oned_vec_index],
                    q[qp_ind[ix]].x[kp1 * ivend + iv], rho[oned_vec_index]);
