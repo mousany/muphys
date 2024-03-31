@@ -20,12 +20,12 @@ using namespace transition;
 using namespace idx;
 using namespace graupel_ct;
 
-struct t_qx_ptr {
-  t_qx_ptr(array_1d_t<real_t> &p_, array_1d_t<real_t> &x_) : p(p_), x(x_) {}
+// struct t_qx_ptr {
+//   t_qx_ptr(array_1d_t<real_t> &p_, array_1d_t<real_t> &x_) : p(p_), x(x_) {}
 
-  array_1d_t<real_t> &p;
-  array_1d_t<real_t> &x;
-}; // pointer vector
+//   array_1d_t<real_t> &p;
+//   array_1d_t<real_t> &x;
+// }; // pointer vector
 
 /**
  * @brief TODO
@@ -88,16 +88,16 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
          array_1d_t<real_t>(
              np)); // terminal velocity for different hydrometeor categories
 
-  array_1d_t<t_qx_ptr>
-      q{}; // vector of pointers to point to four hydrometeor inouts
-  array_1d_t<real_t> emptyArray;
-  q.emplace_back(prr_gsp, qr);
-  q.emplace_back(pri_gsp, qi);
-  q.emplace_back(prs_gsp, qs);
-  q.emplace_back(prg_gsp, qg);
+  // array_1d_t<t_qx_ptr>
+  //     q{}; // vector of pointers to point to four hydrometeor inouts
+  // array_1d_t<real_t> emptyArray;
+  // q.emplace_back(prr_gsp, qr);
+  // q.emplace_back(pri_gsp, qi);
+  // q.emplace_back(prs_gsp, qs);
+  // q.emplace_back(prg_gsp, qg);
 
-  q.emplace_back(emptyArray, qc);
-  q.emplace_back(emptyArray, qv);
+  // q.emplace_back(emptyArray, qc);
+  // q.emplace_back(emptyArray, qv);
 
   // |  i  |  q  |    p    |   x  |
   // |  0  | lqr | prr_gsp |  qr  |
