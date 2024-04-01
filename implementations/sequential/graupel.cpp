@@ -75,12 +75,6 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
   array_2d_t<size_t> kmin(
       nvec, array_1d_t<size_t>(np)); // first level with condensate
 
-  real_t cv, vc, eta, zeta, qvsi, qice, qliq, qtot, dvsw, dvsw0, dvsi, n_ice,
-      m_ice, x_ice, n_snow, l_snow, ice_dep, e_int, stot, xrho;
-
-  real_t update[3], // scratch array with output from precipitation step
-      sink[nx],     // tendencies
-      dqdt[nx];     // tendencies
   array_1d_t<real_t> eflx(
       nvec); // internal energy flux from precipitation (W/m2 )
   array_2d_t<real_t> sx2x(nx, array_1d_t<real_t>(nx, 0.0)), // conversion rates
@@ -184,13 +178,14 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     iv = ind_i[j];
     oned_vec_index = k * ivend + iv;
 
-    dvsw =
+    real_t dvsw =
         qv[oned_vec_index] - qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
-    qvsi = qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index]);
-    dvsi = qv[oned_vec_index] - qvsi;
-    n_snow =
+    real_t qvsi = qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index]);
+    real_t dvsi = qv[oned_vec_index] - qvsi;
+    real_t n_snow =
         snow_number(t[oned_vec_index], rho[oned_vec_index], qs[oned_vec_index]);
-    l_snow = snow_lambda(rho[oned_vec_index], qs[oned_vec_index], n_snow);
+    real_t l_snow =
+        snow_lambda(rho[oned_vec_index], qs[oned_vec_index], n_snow);
 
     sx2x[lqc][lqr] = cloud_to_rain(t[oned_vec_index], qc[oned_vec_index],
                                    qr[oned_vec_index], qnc);
@@ -206,10 +201,13 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     sx2x[lqc][lqg] = cloud_to_graupel(t[oned_vec_index], rho[oned_vec_index],
                                       qc[oned_vec_index], qg[oned_vec_index]);
 
+    real_t ice_dep = 0.0;
+    real_t eta = 0.0;
+
     if (t[oned_vec_index] < tmelt) {
-      n_ice = ice_number(t[oned_vec_index], rho[oned_vec_index]);
-      m_ice = ice_mass(qi[oned_vec_index], n_ice);
-      x_ice = ice_sticking(t[oned_vec_index]);
+      real_t n_ice = ice_number(t[oned_vec_index], rho[oned_vec_index]);
+      real_t m_ice = ice_mass(qi[oned_vec_index], n_ice);
+      real_t x_ice = ice_sticking(t[oned_vec_index]);
 
       if (is_sig_present[j]) {
         eta = deposition_factor(
@@ -248,7 +246,7 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     }
 
     if (is_sig_present[j]) {
-      dvsw0 = qv[oned_vec_index] - qsat_rho(tmelt, rho[oned_vec_index]);
+      real_t dvsw0 = qv[oned_vec_index] - qsat_rho(tmelt, rho[oned_vec_index]);
       sx2x[lqv][lqs] =
           vapor_x_snow(t[oned_vec_index], p[oned_vec_index],
                        rho[oned_vec_index], qs[oned_vec_index], n_snow, l_snow,
@@ -267,6 +265,10 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
           graupel_to_rain(t[oned_vec_index], p[oned_vec_index],
                           rho[oned_vec_index], dvsw0, qg[oned_vec_index]);
     }
+
+    real_t stot = 0.0;
+    real_t sink[nx]; // tendencies
+    real_t dqdt[nx]; // tendencies
 
     // qx_ind = {5, 4, 0, 2, 1, 3}
     // ix = 0, qx_ind[0] = 5
@@ -438,11 +440,11 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     dqdt[3] = sx2x_sum - sink[3];
     qg[oned_vec_index] = std::fmax(0.0, qg[oned_vec_index] + dqdt[3] * dt);
 
-    qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
-    qliq = qc[oned_vec_index] + qr[oned_vec_index];
-    qtot = qv[oned_vec_index] + qice + qliq;
-    cv = cvd + (cvv - cvd) * qtot + (clw - cvv) * qliq +
-         (ci - cvv) * qice; // qtot? or qv?
+    real_t qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
+    real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
+    real_t qtot = qv[oned_vec_index] + qice + qliq;
+    real_t cv = cvd + (cvv - cvd) * qtot + (clw - cvv) * qliq +
+                (ci - cvv) * qice; // qtot? or qv?
     t[oned_vec_index] =
         t[oned_vec_index] +
         dt *
@@ -468,20 +470,24 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 
       kp1 = std::min(ke - 1, k + 1);
       if (k >= *std::min_element(kmin[iv].begin(), kmin[iv].end())) {
-        qliq = qc[oned_vec_index] + qr[oned_vec_index];
-        qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
+        real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
+        real_t qice =
+            qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
 
-        e_int = internal_energy(t[oned_vec_index], qv[oned_vec_index], qliq,
-                                qice, rho[oned_vec_index], dz[oned_vec_index]) +
-                eflx[iv];
-        zeta = dt / (2.0 * dz[oned_vec_index]);
-        xrho = std::sqrt(rho_00 / rho[oned_vec_index]);
+        real_t e_int =
+            internal_energy(t[oned_vec_index], qv[oned_vec_index], qliq, qice,
+                            rho[oned_vec_index], dz[oned_vec_index]) +
+            eflx[iv];
+        real_t zeta = dt / (2.0 * dz[oned_vec_index]);
+        real_t xrho = std::sqrt(rho_00 / rho[oned_vec_index]);
+
+        real_t update[3]; // scratch array with output from precipitation step
 
         // qp_ind = {0, 1, 2, 3}
         // ix = 0, qp_ind[0] = 0
         if (k >= kmin[iv][0]) {
-          vc = vel_scale_factor(0, xrho, rho[oned_vec_index], t[oned_vec_index],
-                                qr[oned_vec_index]);
+          real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
+                                       t[oned_vec_index], qr[oned_vec_index]);
           precip(params[0], update, zeta, vc, prr_gsp[iv], vt[iv][0],
                  qr[oned_vec_index], qr[kp1 * ivend + iv], rho[oned_vec_index]);
           qr[oned_vec_index] = update[0];
@@ -491,8 +497,8 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 
         // ix = 1, qp_ind[1] = 1
         if (k >= kmin[iv][1]) {
-          vc = vel_scale_factor(1, xrho, rho[oned_vec_index], t[oned_vec_index],
-                                qi[oned_vec_index]);
+          real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
+                                       t[oned_vec_index], qi[oned_vec_index]);
           precip(params[1], update, zeta, vc, pri_gsp[iv], vt[iv][1],
                  qi[oned_vec_index], qi[kp1 * ivend + iv], rho[oned_vec_index]);
           qi[oned_vec_index] = update[0];
@@ -502,8 +508,8 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 
         // ix = 2, qp_ind[2] = 2
         if (k >= kmin[iv][2]) {
-          vc = vel_scale_factor(2, xrho, rho[oned_vec_index], t[oned_vec_index],
-                                qs[oned_vec_index]);
+          real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
+                                       t[oned_vec_index], qs[oned_vec_index]);
           precip(params[2], update, zeta, vc, prs_gsp[iv], vt[iv][2],
                  qs[oned_vec_index], qs[kp1 * ivend + iv], rho[oned_vec_index]);
           qs[oned_vec_index] = update[0];
@@ -513,8 +519,8 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 
         // ix = 3, qp_ind[3] = 3
         if (k >= kmin[iv][3]) {
-          vc = vel_scale_factor(3, xrho, rho[oned_vec_index], t[oned_vec_index],
-                                qg[oned_vec_index]);
+          real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
+                                       t[oned_vec_index], qg[oned_vec_index]);
           precip(params[3], update, zeta, vc, prg_gsp[iv], vt[iv][3],
                  qg[oned_vec_index], qg[kp1 * ivend + iv], rho[oned_vec_index]);
           qg[oned_vec_index] = update[0];
