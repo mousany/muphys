@@ -67,11 +67,6 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
              array_1d_t<real_t> &prg_gsp, array_1d_t<real_t> &pflx) {
   // std::cout << "sequential graupel" << std::endl;
 
-  array_1d_t<bool> is_sig_present(nvec *
-                                  ke); // is snow, ice or graupel present?
-
-  array_1d_t<size_t> ind_k(nvec * ke),
-      ind_i(nvec * ke); // k index of gathered point, iv index of gathered point
   array_2d_t<size_t> kmin(
       nvec, array_1d_t<size_t>(np)); // first level with condensate
 
@@ -99,31 +94,10 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
   // |  4  | lqc |         |  qc  |
   // |  5  | lqv |         |  qv  |
 
-  size_t jmx = 0;
+  // The loop is intentionally i<nlev; since we are using an unsigned integer
+  // data type, when i reaches 0, and you try to decrement further, (to -1), it
+  // wraps to the maximum value representable by size_t.
 
-  for (size_t j = ivstart; j < ivend; j++) {
-    for (size_t i = ke - 1; i < ke; --i) {
-      size_t oned_vec_index = i * ivend + j;
-      if ((std::max({qc[oned_vec_index], qr[oned_vec_index], qs[oned_vec_index],
-                     qi[oned_vec_index], qg[oned_vec_index]}) > qmin) or
-          ((t[oned_vec_index] < tfrz_het2) and
-           (qv[oned_vec_index] >
-            qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index])))) {
-
-        size_t jmx_local = jmx++;
-
-        ind_k[jmx_local] = i;
-        ind_i[jmx_local] = j;
-        is_sig_present[jmx_local] =
-            std::max({qs[oned_vec_index], qi[oned_vec_index],
-                      qg[oned_vec_index]}) > qmin;
-      }
-    }
-  }
-
-// The loop is intentionally i<nlev; since we are using an unsigned integer
-// data type, when i reaches 0, and you try to decrement further, (to -1), it
-// wraps to the maximum value representable by size_t.
 #pragma omp parallel for
   for (size_t j = ivstart; j < ivend; j++) {
     for (size_t i = ke - 1; i < ke; --i) {
@@ -173,297 +147,309 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
       if (qg[oned_vec_index] > qmin) {
         kmin[j][3] = i;
       }
-    }
-  }
 
-#pragma omp parallel for
-  for (size_t j = 0; j < jmx; j++) {
-    array_2d_t<real_t> sx2x(nx,
-                            array_1d_t<real_t>(nx, 0.0)); // conversion rates
+      if ((std::max({qc[oned_vec_index], qr[oned_vec_index], qs[oned_vec_index],
+                     qi[oned_vec_index], qg[oned_vec_index]}) > qmin) or
+          ((t[oned_vec_index] < tfrz_het2) and
+           (qv[oned_vec_index] >
+            qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index])))) {
 
-    size_t k = ind_k[j];
-    size_t iv = ind_i[j];
-    size_t oned_vec_index = k * ivend + iv;
+        bool is_sig_present = std::max({qs[oned_vec_index], qi[oned_vec_index],
+                                        qg[oned_vec_index]}) >
+                              qmin; // is snow, ice or graupel present?
 
-    real_t dvsw =
-        qv[oned_vec_index] - qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
-    real_t qvsi = qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index]);
-    real_t dvsi = qv[oned_vec_index] - qvsi;
-    real_t n_snow =
-        snow_number(t[oned_vec_index], rho[oned_vec_index], qs[oned_vec_index]);
-    real_t l_snow =
-        snow_lambda(rho[oned_vec_index], qs[oned_vec_index], n_snow);
+        {
+          array_2d_t<real_t> sx2x(
+              nx, array_1d_t<real_t>(nx, 0.0)); // conversion rates
 
-    sx2x[lqc][lqr] = cloud_to_rain(t[oned_vec_index], qc[oned_vec_index],
-                                   qr[oned_vec_index], qnc);
-    sx2x[lqr][lqv] =
-        rain_to_vapor(t[oned_vec_index], rho[oned_vec_index],
-                      qc[oned_vec_index], qr[oned_vec_index], dvsw, dt);
-    sx2x[lqc][lqi] = cloud_x_ice(t[oned_vec_index], qc[oned_vec_index],
-                                 qi[oned_vec_index], dt);
-    sx2x[lqi][lqc] = -std::fmin(sx2x[lqc][lqi], 0.0);
-    sx2x[lqc][lqi] = std::fmax(sx2x[lqc][lqi], 0.0);
-    sx2x[lqc][lqs] = cloud_to_snow(t[oned_vec_index], qc[oned_vec_index],
-                                   qs[oned_vec_index], n_snow, l_snow);
-    sx2x[lqc][lqg] = cloud_to_graupel(t[oned_vec_index], rho[oned_vec_index],
-                                      qc[oned_vec_index], qg[oned_vec_index]);
+          real_t dvsw = qv[oned_vec_index] -
+                        qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
+          real_t qvsi = qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index]);
+          real_t dvsi = qv[oned_vec_index] - qvsi;
+          real_t n_snow = snow_number(t[oned_vec_index], rho[oned_vec_index],
+                                      qs[oned_vec_index]);
+          real_t l_snow =
+              snow_lambda(rho[oned_vec_index], qs[oned_vec_index], n_snow);
 
-    real_t ice_dep = 0.0;
-    real_t eta = 0.0;
+          sx2x[lqc][lqr] = cloud_to_rain(t[oned_vec_index], qc[oned_vec_index],
+                                         qr[oned_vec_index], qnc);
+          sx2x[lqr][lqv] =
+              rain_to_vapor(t[oned_vec_index], rho[oned_vec_index],
+                            qc[oned_vec_index], qr[oned_vec_index], dvsw, dt);
+          sx2x[lqc][lqi] = cloud_x_ice(t[oned_vec_index], qc[oned_vec_index],
+                                       qi[oned_vec_index], dt);
+          sx2x[lqi][lqc] = -std::fmin(sx2x[lqc][lqi], 0.0);
+          sx2x[lqc][lqi] = std::fmax(sx2x[lqc][lqi], 0.0);
+          sx2x[lqc][lqs] = cloud_to_snow(t[oned_vec_index], qc[oned_vec_index],
+                                         qs[oned_vec_index], n_snow, l_snow);
+          sx2x[lqc][lqg] =
+              cloud_to_graupel(t[oned_vec_index], rho[oned_vec_index],
+                               qc[oned_vec_index], qg[oned_vec_index]);
 
-    if (t[oned_vec_index] < tmelt) {
-      real_t n_ice = ice_number(t[oned_vec_index], rho[oned_vec_index]);
-      real_t m_ice = ice_mass(qi[oned_vec_index], n_ice);
-      real_t x_ice = ice_sticking(t[oned_vec_index]);
+          real_t ice_dep = 0.0;
+          real_t eta = 0.0;
 
-      if (is_sig_present[j]) {
-        eta = deposition_factor(
-            t[oned_vec_index],
-            qvsi); // neglect cloud depth cor. from gcsp_graupel
-        sx2x[lqv][lqi] = vapor_x_ice(qi[oned_vec_index], m_ice, eta, dvsi, dt);
-        sx2x[lqi][lqv] = -std::fmin(sx2x[lqv][lqi], 0.0);
-        sx2x[lqv][lqi] = std::fmax(sx2x[lqv][lqi], 0.0);
-        ice_dep = std::fmin(sx2x[lqv][lqi], dvsi / dt);
+          if (t[oned_vec_index] < tmelt) {
+            real_t n_ice = ice_number(t[oned_vec_index], rho[oned_vec_index]);
+            real_t m_ice = ice_mass(qi[oned_vec_index], n_ice);
+            real_t x_ice = ice_sticking(t[oned_vec_index]);
 
-        sx2x[lqi][lqs] =
-            deposition_auto_conversion(qi[oned_vec_index], m_ice, ice_dep);
-        sx2x[lqi][lqs] = sx2x[lqi][lqs] +
-                         ice_to_snow(qi[oned_vec_index], n_snow, l_snow, x_ice);
-        sx2x[lqi][lqg] =
-            ice_to_graupel(rho[oned_vec_index], qr[oned_vec_index],
-                           qg[oned_vec_index], qi[oned_vec_index], x_ice);
-        sx2x[lqs][lqg] =
-            snow_to_graupel(t[oned_vec_index], rho[oned_vec_index],
-                            qc[oned_vec_index], qs[oned_vec_index]);
-        sx2x[lqr][lqg] = rain_to_graupel(t[oned_vec_index], rho[oned_vec_index],
-                                         qc[oned_vec_index], qr[oned_vec_index],
-                                         qi[oned_vec_index], qs[oned_vec_index],
-                                         m_ice, dvsw, dt);
-      }
-      sx2x[lqv][lqi] =
-          sx2x[lqv][lqi] +
-          ice_deposition_nucleation(t[oned_vec_index], qc[oned_vec_index],
-                                    qi[oned_vec_index], n_ice, dvsi, dt);
-    } else {
-      sx2x[lqc][lqr] = sx2x[lqc][lqr] + sx2x[lqc][lqs] + sx2x[lqc][lqg];
-      sx2x[lqc][lqs] = 0.0;
-      sx2x[lqc][lqg] = 0.0;
-      ice_dep = 0.0;
-      eta = 0.0;
-    }
+            if (is_sig_present) {
+              eta = deposition_factor(
+                  t[oned_vec_index],
+                  qvsi); // neglect cloud depth cor. from gcsp_graupel
+              sx2x[lqv][lqi] =
+                  vapor_x_ice(qi[oned_vec_index], m_ice, eta, dvsi, dt);
+              sx2x[lqi][lqv] = -std::fmin(sx2x[lqv][lqi], 0.0);
+              sx2x[lqv][lqi] = std::fmax(sx2x[lqv][lqi], 0.0);
+              ice_dep = std::fmin(sx2x[lqv][lqi], dvsi / dt);
 
-    if (is_sig_present[j]) {
-      real_t dvsw0 = qv[oned_vec_index] - qsat_rho(tmelt, rho[oned_vec_index]);
-      sx2x[lqv][lqs] =
-          vapor_x_snow(t[oned_vec_index], p[oned_vec_index],
-                       rho[oned_vec_index], qs[oned_vec_index], n_snow, l_snow,
-                       eta, ice_dep, dvsw, dvsi, dvsw0, dt);
-      sx2x[lqs][lqv] = -std::fmin(sx2x[lqv][lqs], 0.0);
-      sx2x[lqv][lqs] = std::fmax(sx2x[lqv][lqs], 0.0);
-      sx2x[lqv][lqg] = vapor_x_graupel(t[oned_vec_index], p[oned_vec_index],
-                                       rho[oned_vec_index], qg[oned_vec_index],
-                                       dvsw, dvsi, dvsw0, dt);
-      sx2x[lqg][lqv] = -std::fmin(sx2x[lqv][lqg], 0.0);
-      sx2x[lqv][lqg] = std::fmax(sx2x[lqv][lqg], 0.0);
-      sx2x[lqs][lqr] =
-          snow_to_rain(t[oned_vec_index], p[oned_vec_index],
-                       rho[oned_vec_index], dvsw0, qs[oned_vec_index]);
-      sx2x[lqg][lqr] =
-          graupel_to_rain(t[oned_vec_index], p[oned_vec_index],
-                          rho[oned_vec_index], dvsw0, qg[oned_vec_index]);
-    }
+              sx2x[lqi][lqs] = deposition_auto_conversion(qi[oned_vec_index],
+                                                          m_ice, ice_dep);
+              sx2x[lqi][lqs] =
+                  sx2x[lqi][lqs] +
+                  ice_to_snow(qi[oned_vec_index], n_snow, l_snow, x_ice);
+              sx2x[lqi][lqg] =
+                  ice_to_graupel(rho[oned_vec_index], qr[oned_vec_index],
+                                 qg[oned_vec_index], qi[oned_vec_index], x_ice);
+              sx2x[lqs][lqg] =
+                  snow_to_graupel(t[oned_vec_index], rho[oned_vec_index],
+                                  qc[oned_vec_index], qs[oned_vec_index]);
+              sx2x[lqr][lqg] = rain_to_graupel(
+                  t[oned_vec_index], rho[oned_vec_index], qc[oned_vec_index],
+                  qr[oned_vec_index], qi[oned_vec_index], qs[oned_vec_index],
+                  m_ice, dvsw, dt);
+            }
+            sx2x[lqv][lqi] =
+                sx2x[lqv][lqi] +
+                ice_deposition_nucleation(t[oned_vec_index], qc[oned_vec_index],
+                                          qi[oned_vec_index], n_ice, dvsi, dt);
+          } else {
+            sx2x[lqc][lqr] = sx2x[lqc][lqr] + sx2x[lqc][lqs] + sx2x[lqc][lqg];
+            sx2x[lqc][lqs] = 0.0;
+            sx2x[lqc][lqg] = 0.0;
+            ice_dep = 0.0;
+            eta = 0.0;
+          }
 
-    real_t stot = 0.0;
-    real_t sink[nx]; // tendencies
-    real_t dqdt[nx]; // tendencies
+          if (is_sig_present) {
+            real_t dvsw0 =
+                qv[oned_vec_index] - qsat_rho(tmelt, rho[oned_vec_index]);
+            sx2x[lqv][lqs] =
+                vapor_x_snow(t[oned_vec_index], p[oned_vec_index],
+                             rho[oned_vec_index], qs[oned_vec_index], n_snow,
+                             l_snow, eta, ice_dep, dvsw, dvsi, dvsw0, dt);
+            sx2x[lqs][lqv] = -std::fmin(sx2x[lqv][lqs], 0.0);
+            sx2x[lqv][lqs] = std::fmax(sx2x[lqv][lqs], 0.0);
+            sx2x[lqv][lqg] = vapor_x_graupel(
+                t[oned_vec_index], p[oned_vec_index], rho[oned_vec_index],
+                qg[oned_vec_index], dvsw, dvsi, dvsw0, dt);
+            sx2x[lqg][lqv] = -std::fmin(sx2x[lqv][lqg], 0.0);
+            sx2x[lqv][lqg] = std::fmax(sx2x[lqv][lqg], 0.0);
+            sx2x[lqs][lqr] =
+                snow_to_rain(t[oned_vec_index], p[oned_vec_index],
+                             rho[oned_vec_index], dvsw0, qs[oned_vec_index]);
+            sx2x[lqg][lqr] =
+                graupel_to_rain(t[oned_vec_index], p[oned_vec_index],
+                                rho[oned_vec_index], dvsw0, qg[oned_vec_index]);
+          }
 
-    // qx_ind = {5, 4, 0, 2, 1, 3}
-    // ix = 0, qx_ind[0] = 5
-    sink[5] = 0.0;
-    if ((is_sig_present[j]) or (5 == lqc) or (5 == lqv) or (5 == lqr)) {
+          real_t stot = 0.0;
+          real_t sink[nx]; // tendencies
+          real_t dqdt[nx]; // tendencies
 
-      for (size_t i = 0; i < nx; i++) {
-        sink[5] = sink[5] + sx2x[5][i];
-      }
-      stot = qv[oned_vec_index] / dt;
+          // qx_ind = {5, 4, 0, 2, 1, 3}
+          // ix = 0, qx_ind[0] = 5
+          sink[5] = 0.0;
+          if ((is_sig_present) or (5 == lqc) or (5 == lqv) or (5 == lqr)) {
 
-      if ((sink[5] > stot) && (qv[oned_vec_index] > qmin)) {
-        real_t nextSink = 0.0;
+            for (size_t i = 0; i < nx; i++) {
+              sink[5] = sink[5] + sx2x[5][i];
+            }
+            stot = qv[oned_vec_index] / dt;
 
-        for (size_t i = 0; i < nx; i++) {
-          sx2x[5][i] = sx2x[5][i] * stot / sink[5];
-          nextSink = nextSink + sx2x[5][i];
+            if ((sink[5] > stot) && (qv[oned_vec_index] > qmin)) {
+              real_t nextSink = 0.0;
+
+              for (size_t i = 0; i < nx; i++) {
+                sx2x[5][i] = sx2x[5][i] * stot / sink[5];
+                nextSink = nextSink + sx2x[5][i];
+              }
+              sink[5] = nextSink;
+            }
+          }
+
+          // ix = 1, qx_ind[1] = 4
+          sink[4] = 0.0;
+          if ((is_sig_present) or (4 == lqc) or (4 == lqv) or (4 == lqr)) {
+
+            for (size_t i = 0; i < nx; i++) {
+              sink[4] = sink[4] + sx2x[4][i];
+            }
+            stot = qc[oned_vec_index] / dt;
+
+            if ((sink[4] > stot) && (qc[oned_vec_index] > qmin)) {
+              real_t nextSink = 0.0;
+
+              for (size_t i = 0; i < nx; i++) {
+                sx2x[4][i] = sx2x[4][i] * stot / sink[4];
+                nextSink = nextSink + sx2x[4][i];
+              }
+              sink[4] = nextSink;
+            }
+          }
+
+          // ix = 2, qx_ind[2] = 0
+          sink[0] = 0.0;
+          if ((is_sig_present) or (0 == lqc) or (0 == lqv) or (0 == lqr)) {
+
+            for (size_t i = 0; i < nx; i++) {
+              sink[0] = sink[0] + sx2x[0][i];
+            }
+            stot = qr[oned_vec_index] / dt;
+
+            if ((sink[0] > stot) && (qr[oned_vec_index] > qmin)) {
+              real_t nextSink = 0.0;
+
+              for (size_t i = 0; i < nx; i++) {
+                sx2x[0][i] = sx2x[0][i] * stot / sink[0];
+                nextSink = nextSink + sx2x[0][i];
+              }
+              sink[0] = nextSink;
+            }
+          }
+
+          // ix = 3, qx_ind[3] = 2
+          sink[2] = 0.0;
+          if ((is_sig_present) or (2 == lqc) or (2 == lqv) or (2 == lqr)) {
+
+            for (size_t i = 0; i < nx; i++) {
+              sink[2] = sink[2] + sx2x[2][i];
+            }
+            stot = qs[oned_vec_index] / dt;
+
+            if ((sink[2] > stot) && (qs[oned_vec_index] > qmin)) {
+              real_t nextSink = 0.0;
+
+              for (size_t i = 0; i < nx; i++) {
+                sx2x[2][i] = sx2x[2][i] * stot / sink[2];
+                nextSink = nextSink + sx2x[2][i];
+              }
+              sink[2] = nextSink;
+            }
+          }
+
+          // ix = 4, qx_ind[4] = 1
+          sink[1] = 0.0;
+          if ((is_sig_present) or (1 == lqc) or (1 == lqv) or (1 == lqr)) {
+
+            for (size_t i = 0; i < nx; i++) {
+              sink[1] = sink[1] + sx2x[1][i];
+            }
+            stot = qi[oned_vec_index] / dt;
+
+            if ((sink[1] > stot) && (qi[oned_vec_index] > qmin)) {
+              real_t nextSink = 0.0;
+
+              for (size_t i = 0; i < nx; i++) {
+                sx2x[1][i] = sx2x[1][i] * stot / sink[1];
+                nextSink = nextSink + sx2x[1][i];
+              }
+              sink[1] = nextSink;
+            }
+          }
+
+          // ix = 5, qx_ind[5] = 3
+          sink[3] = 0.0;
+          if ((is_sig_present) or (3 == lqc) or (3 == lqv) or (3 == lqr)) {
+
+            for (size_t i = 0; i < nx; i++) {
+              sink[3] = sink[3] + sx2x[3][i];
+            }
+            stot = qg[oned_vec_index] / dt;
+
+            if ((sink[3] > stot) && (qg[oned_vec_index] > qmin)) {
+              real_t nextSink = 0.0;
+
+              for (size_t i = 0; i < nx; i++) {
+                sx2x[3][i] = sx2x[3][i] * stot / sink[3];
+                nextSink = nextSink + sx2x[3][i];
+              }
+              sink[3] = nextSink;
+            }
+          }
+
+          // qx_ind = {5, 4, 0, 2, 1, 3}
+          // ix = 0, qx_ind[0] = 5
+          real_t sx2x_sum = 0;
+          for (size_t i = 0; i < nx; i++) {
+            sx2x_sum = sx2x_sum + sx2x[i][5];
+          }
+          dqdt[5] = sx2x_sum - sink[5];
+          qv[oned_vec_index] =
+              std::fmax(0.0, qv[oned_vec_index] + dqdt[5] * dt);
+
+          // ix = 1, qx_ind[1] = 4
+          sx2x_sum = 0;
+          for (size_t i = 0; i < nx; i++) {
+            sx2x_sum = sx2x_sum + sx2x[i][4];
+          }
+          dqdt[4] = sx2x_sum - sink[4];
+          qc[oned_vec_index] =
+              std::fmax(0.0, qc[oned_vec_index] + dqdt[4] * dt);
+
+          // ix = 2, qx_ind[2] = 0
+          sx2x_sum = 0;
+          for (size_t i = 0; i < nx; i++) {
+            sx2x_sum = sx2x_sum + sx2x[i][0];
+          }
+          dqdt[0] = sx2x_sum - sink[0];
+          qr[oned_vec_index] =
+              std::fmax(0.0, qr[oned_vec_index] + dqdt[0] * dt);
+
+          // ix = 3, qx_ind[3] = 2
+          sx2x_sum = 0;
+          for (size_t i = 0; i < nx; i++) {
+            sx2x_sum = sx2x_sum + sx2x[i][2];
+          }
+          dqdt[2] = sx2x_sum - sink[2];
+          qs[oned_vec_index] =
+              std::fmax(0.0, qs[oned_vec_index] + dqdt[2] * dt);
+
+          // ix = 4, qx_ind[4] = 1
+          sx2x_sum = 0;
+          for (size_t i = 0; i < nx; i++) {
+            sx2x_sum = sx2x_sum + sx2x[i][1];
+          }
+          dqdt[1] = sx2x_sum - sink[1];
+          qi[oned_vec_index] =
+              std::fmax(0.0, qi[oned_vec_index] + dqdt[1] * dt);
+
+          // ix = 5, qx_ind[5] = 3
+          sx2x_sum = 0;
+          for (size_t i = 0; i < nx; i++) {
+            sx2x_sum = sx2x_sum + sx2x[i][3];
+          }
+          dqdt[3] = sx2x_sum - sink[3];
+          qg[oned_vec_index] =
+              std::fmax(0.0, qg[oned_vec_index] + dqdt[3] * dt);
+
+          real_t qice =
+              qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
+          real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
+          real_t qtot = qv[oned_vec_index] + qice + qliq;
+          real_t cv = cvd + (cvv - cvd) * qtot + (clw - cvv) * qliq +
+                      (ci - cvv) * qice; // qtot? or qv?
+          t[oned_vec_index] = t[oned_vec_index] +
+                              dt *
+                                  ((dqdt[lqc] + dqdt[lqr]) *
+                                       (lvc - (clw - cvv) * t[oned_vec_index]) +
+                                   (dqdt[lqi] + dqdt[lqs] + dqdt[lqg]) *
+                                       (lsc - (ci - cvv) * t[oned_vec_index])) /
+                                  cv;
         }
-        sink[5] = nextSink;
       }
     }
-
-    // ix = 1, qx_ind[1] = 4
-    sink[4] = 0.0;
-    if ((is_sig_present[j]) or (4 == lqc) or (4 == lqv) or (4 == lqr)) {
-
-      for (size_t i = 0; i < nx; i++) {
-        sink[4] = sink[4] + sx2x[4][i];
-      }
-      stot = qc[oned_vec_index] / dt;
-
-      if ((sink[4] > stot) && (qc[oned_vec_index] > qmin)) {
-        real_t nextSink = 0.0;
-
-        for (size_t i = 0; i < nx; i++) {
-          sx2x[4][i] = sx2x[4][i] * stot / sink[4];
-          nextSink = nextSink + sx2x[4][i];
-        }
-        sink[4] = nextSink;
-      }
-    }
-
-    // ix = 2, qx_ind[2] = 0
-    sink[0] = 0.0;
-    if ((is_sig_present[j]) or (0 == lqc) or (0 == lqv) or (0 == lqr)) {
-
-      for (size_t i = 0; i < nx; i++) {
-        sink[0] = sink[0] + sx2x[0][i];
-      }
-      stot = qr[oned_vec_index] / dt;
-
-      if ((sink[0] > stot) && (qr[oned_vec_index] > qmin)) {
-        real_t nextSink = 0.0;
-
-        for (size_t i = 0; i < nx; i++) {
-          sx2x[0][i] = sx2x[0][i] * stot / sink[0];
-          nextSink = nextSink + sx2x[0][i];
-        }
-        sink[0] = nextSink;
-      }
-    }
-
-    // ix = 3, qx_ind[3] = 2
-    sink[2] = 0.0;
-    if ((is_sig_present[j]) or (2 == lqc) or (2 == lqv) or (2 == lqr)) {
-
-      for (size_t i = 0; i < nx; i++) {
-        sink[2] = sink[2] + sx2x[2][i];
-      }
-      stot = qs[oned_vec_index] / dt;
-
-      if ((sink[2] > stot) && (qs[oned_vec_index] > qmin)) {
-        real_t nextSink = 0.0;
-
-        for (size_t i = 0; i < nx; i++) {
-          sx2x[2][i] = sx2x[2][i] * stot / sink[2];
-          nextSink = nextSink + sx2x[2][i];
-        }
-        sink[2] = nextSink;
-      }
-    }
-
-    // ix = 4, qx_ind[4] = 1
-    sink[1] = 0.0;
-    if ((is_sig_present[j]) or (1 == lqc) or (1 == lqv) or (1 == lqr)) {
-
-      for (size_t i = 0; i < nx; i++) {
-        sink[1] = sink[1] + sx2x[1][i];
-      }
-      stot = qi[oned_vec_index] / dt;
-
-      if ((sink[1] > stot) && (qi[oned_vec_index] > qmin)) {
-        real_t nextSink = 0.0;
-
-        for (size_t i = 0; i < nx; i++) {
-          sx2x[1][i] = sx2x[1][i] * stot / sink[1];
-          nextSink = nextSink + sx2x[1][i];
-        }
-        sink[1] = nextSink;
-      }
-    }
-
-    // ix = 5, qx_ind[5] = 3
-    sink[3] = 0.0;
-    if ((is_sig_present[j]) or (3 == lqc) or (3 == lqv) or (3 == lqr)) {
-
-      for (size_t i = 0; i < nx; i++) {
-        sink[3] = sink[3] + sx2x[3][i];
-      }
-      stot = qg[oned_vec_index] / dt;
-
-      if ((sink[3] > stot) && (qg[oned_vec_index] > qmin)) {
-        real_t nextSink = 0.0;
-
-        for (size_t i = 0; i < nx; i++) {
-          sx2x[3][i] = sx2x[3][i] * stot / sink[3];
-          nextSink = nextSink + sx2x[3][i];
-        }
-        sink[3] = nextSink;
-      }
-    }
-
-    // qx_ind = {5, 4, 0, 2, 1, 3}
-    // ix = 0, qx_ind[0] = 5
-    real_t sx2x_sum = 0;
-    for (size_t i = 0; i < nx; i++) {
-      sx2x_sum = sx2x_sum + sx2x[i][5];
-    }
-    dqdt[5] = sx2x_sum - sink[5];
-    qv[oned_vec_index] = std::fmax(0.0, qv[oned_vec_index] + dqdt[5] * dt);
-
-    // ix = 1, qx_ind[1] = 4
-    sx2x_sum = 0;
-    for (size_t i = 0; i < nx; i++) {
-      sx2x_sum = sx2x_sum + sx2x[i][4];
-    }
-    dqdt[4] = sx2x_sum - sink[4];
-    qc[oned_vec_index] = std::fmax(0.0, qc[oned_vec_index] + dqdt[4] * dt);
-
-    // ix = 2, qx_ind[2] = 0
-    sx2x_sum = 0;
-    for (size_t i = 0; i < nx; i++) {
-      sx2x_sum = sx2x_sum + sx2x[i][0];
-    }
-    dqdt[0] = sx2x_sum - sink[0];
-    qr[oned_vec_index] = std::fmax(0.0, qr[oned_vec_index] + dqdt[0] * dt);
-
-    // ix = 3, qx_ind[3] = 2
-    sx2x_sum = 0;
-    for (size_t i = 0; i < nx; i++) {
-      sx2x_sum = sx2x_sum + sx2x[i][2];
-    }
-    dqdt[2] = sx2x_sum - sink[2];
-    qs[oned_vec_index] = std::fmax(0.0, qs[oned_vec_index] + dqdt[2] * dt);
-
-    // ix = 4, qx_ind[4] = 1
-    sx2x_sum = 0;
-    for (size_t i = 0; i < nx; i++) {
-      sx2x_sum = sx2x_sum + sx2x[i][1];
-    }
-    dqdt[1] = sx2x_sum - sink[1];
-    qi[oned_vec_index] = std::fmax(0.0, qi[oned_vec_index] + dqdt[1] * dt);
-
-    // ix = 5, qx_ind[5] = 3
-    sx2x_sum = 0;
-    for (size_t i = 0; i < nx; i++) {
-      sx2x_sum = sx2x_sum + sx2x[i][3];
-    }
-    dqdt[3] = sx2x_sum - sink[3];
-    qg[oned_vec_index] = std::fmax(0.0, qg[oned_vec_index] + dqdt[3] * dt);
-
-    real_t qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
-    real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
-    real_t qtot = qv[oned_vec_index] + qice + qliq;
-    real_t cv = cvd + (cvv - cvd) * qtot + (clw - cvv) * qliq +
-                (ci - cvv) * qice; // qtot? or qv?
-    t[oned_vec_index] =
-        t[oned_vec_index] +
-        dt *
-            ((dqdt[lqc] + dqdt[lqr]) * (lvc - (clw - cvv) * t[oned_vec_index]) +
-             (dqdt[lqi] + dqdt[lqs] + dqdt[lqg]) *
-                 (lsc - (ci - cvv) * t[oned_vec_index])) /
-            cv;
-
-    // reset all values of sx2x to zero
-    // for (auto &v : sx2x) {
-    //   std::fill(v.begin(), v.end(), 0);
-    // }
   }
 
   size_t k_end = (lrain) ? ke : kstart - 1;
