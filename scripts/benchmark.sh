@@ -11,7 +11,7 @@ BUILD_PREFIX=build_benchmark
 # rm -rf $BUILD_PREFIX 
 mkdir -p $BUILD_PREFIX
 
-cmake  -DMAKE_CXX_COMPILER=g++ \
+cmake  -DCMAKE_CXX_COMPILER=g++ \
        -DCMAKE_CXX_FLAGS="-O3" \
        -DMU_IMPL=$MU_IMPL \
        -DMU_ENABLE_SINGLE=ON \

@@ -75,8 +75,6 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
   array_2d_t<size_t> kmin(
       nvec, array_1d_t<size_t>(np)); // first level with condensate
 
-  array_1d_t<real_t> eflx(
-      nvec); // internal energy flux from precipitation (W/m2 )
   array_2d_t<real_t> sx2x(nx, array_1d_t<real_t>(nx, 0.0)), // conversion rates
       vt(nvec,
          array_1d_t<real_t>(
@@ -107,8 +105,8 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
   // The loop is intentionally i<nlev; since we are using an unsigned integer
   // data type, when i reaches 0, and you try to decrement further, (to -1), it
   // wraps to the maximum value representable by size_t.
-  size_t oned_vec_index;
   for (size_t i = ke - 1; i < ke; --i) {
+    size_t oned_vec_index;
     for (size_t j = ivstart; j < ivend; j++) {
       oned_vec_index = i * ivend + j;
       if ((std::max({qc[oned_vec_index], qr[oned_vec_index], qs[oned_vec_index],
@@ -171,12 +169,10 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     }
   }
 
-  size_t k, iv;
-  real_t sx2x_sum;
   for (size_t j = 0; j < jmx_; j++) {
-    k = ind_k[j];
-    iv = ind_i[j];
-    oned_vec_index = k * ivend + iv;
+    size_t k = ind_k[j];
+    size_t iv = ind_i[j];
+    size_t oned_vec_index = k * ivend + iv;
 
     real_t dvsw =
         qv[oned_vec_index] - qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
@@ -393,7 +389,7 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 
     // qx_ind = {5, 4, 0, 2, 1, 3}
     // ix = 0, qx_ind[0] = 5
-    sx2x_sum = 0;
+    real_t sx2x_sum = 0;
     for (size_t i = 0; i < nx; i++) {
       sx2x_sum = sx2x_sum + sx2x[i][5];
     }
@@ -459,16 +455,18 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     }
   }
 
-  size_t kp1;
   size_t k_end = (lrain) ? ke : kstart - 1;
-  for (size_t k = kstart; k < k_end; k++) {
-    for (size_t iv = ivstart; iv < ivend; iv++) {
-      oned_vec_index = k * ivend + iv;
+#pragma omp parallel for
+  for (size_t iv = ivstart; iv < ivend; iv++) {
+    array_1d_t<real_t> eflx(
+        nvec); // internal energy flux from precipitation (W/m2 )
+    for (size_t k = kstart; k < k_end; k++) {
+      size_t oned_vec_index = k * ivend + iv;
       if (k == kstart) {
         eflx[iv] = 0.0;
       }
 
-      kp1 = std::min(ke - 1, k + 1);
+      size_t kp1 = std::min(ke - 1, k + 1);
       if (k >= *std::min_element(kmin[iv].begin(), kmin[iv].end())) {
         real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
         real_t qice =
