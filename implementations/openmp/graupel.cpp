@@ -75,10 +75,10 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
   array_2d_t<size_t> kmin(
       nvec, array_1d_t<size_t>(np)); // first level with condensate
 
-  array_2d_t<real_t> sx2x(nx, array_1d_t<real_t>(nx, 0.0)), // conversion rates
-      vt(nvec,
-         array_1d_t<real_t>(
-             np)); // terminal velocity for different hydrometeor categories
+  array_2d_t<real_t> vt(
+      nvec,
+      array_1d_t<real_t>(
+          np)); // terminal velocity for different hydrometeor categories
 
   // array_1d_t<t_qx_ptr>
   //     q{}; // vector of pointers to point to four hydrometeor inouts
@@ -100,27 +100,34 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
   // |  5  | lqv |         |  qv  |
 
   size_t jmx = 0;
-  size_t jmx_ = jmx;
 
-  // The loop is intentionally i<nlev; since we are using an unsigned integer
-  // data type, when i reaches 0, and you try to decrement further, (to -1), it
-  // wraps to the maximum value representable by size_t.
-  for (size_t i = ke - 1; i < ke; --i) {
-    size_t oned_vec_index;
-    for (size_t j = ivstart; j < ivend; j++) {
-      oned_vec_index = i * ivend + j;
+  for (size_t j = ivstart; j < ivend; j++) {
+    for (size_t i = ke - 1; i < ke; --i) {
+      size_t oned_vec_index = i * ivend + j;
       if ((std::max({qc[oned_vec_index], qr[oned_vec_index], qs[oned_vec_index],
                      qi[oned_vec_index], qg[oned_vec_index]}) > qmin) or
           ((t[oned_vec_index] < tfrz_het2) and
            (qv[oned_vec_index] >
             qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index])))) {
-        jmx_ = jmx_ + 1;
-        ind_k[jmx] = i;
-        ind_i[jmx] = j;
-        is_sig_present[jmx] = std::max({qs[oned_vec_index], qi[oned_vec_index],
-                                        qg[oned_vec_index]}) > qmin;
-        jmx = jmx_;
+
+        size_t jmx_local = jmx++;
+
+        ind_k[jmx_local] = i;
+        ind_i[jmx_local] = j;
+        is_sig_present[jmx_local] =
+            std::max({qs[oned_vec_index], qi[oned_vec_index],
+                      qg[oned_vec_index]}) > qmin;
       }
+    }
+  }
+
+// The loop is intentionally i<nlev; since we are using an unsigned integer
+// data type, when i reaches 0, and you try to decrement further, (to -1), it
+// wraps to the maximum value representable by size_t.
+#pragma omp parallel for
+  for (size_t j = ivstart; j < ivend; j++) {
+    for (size_t i = ke - 1; i < ke; --i) {
+      size_t oned_vec_index = i * ivend + j;
 
       // qp_ind = {0, 1, 2, 3}
       // ix = 0, qp_ind[0] = 0
@@ -169,7 +176,11 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     }
   }
 
-  for (size_t j = 0; j < jmx_; j++) {
+#pragma omp parallel for
+  for (size_t j = 0; j < jmx; j++) {
+    array_2d_t<real_t> sx2x(nx,
+                            array_1d_t<real_t>(nx, 0.0)); // conversion rates
+
     size_t k = ind_k[j];
     size_t iv = ind_i[j];
     size_t oned_vec_index = k * ivend + iv;
@@ -450,9 +461,9 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
             cv;
 
     // reset all values of sx2x to zero
-    for (auto &v : sx2x) {
-      std::fill(v.begin(), v.end(), 0);
-    }
+    // for (auto &v : sx2x) {
+    //   std::fill(v.begin(), v.end(), 0);
+    // }
   }
 
   size_t k_end = (lrain) ? ke : kstart - 1;
