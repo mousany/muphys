@@ -42,6 +42,9 @@ template <typename T> using array_1d_t = std::vector<T, allocator<T>>;
 template <typename T>
 using array_2d_t = std::vector<std::vector<T, allocator<T>>>;
 
+template <typename T> using buffer_1d_t = T *;
+template <typename T> using buffer_2d_t = T *;
+
 #ifdef MU_DEVICE
 #define TARGET __host__ __device__
 #else

@@ -68,6 +68,7 @@
  * @param [out] pflx Total precipitation flux
  *
  */
+#if defined(MU_ENABLE_SEQ)
 void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
              size_t &kstart, real_t &dt, array_1d_t<real_t> &dz,
              array_1d_t<real_t> &t, array_1d_t<real_t> &rho,
@@ -77,3 +78,16 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
              array_1d_t<real_t> &qg, real_t &qnc, array_1d_t<real_t> &prr_gsp,
              array_1d_t<real_t> &pri_gsp, array_1d_t<real_t> &prs_gsp,
              array_1d_t<real_t> &prg_gsp, array_1d_t<real_t> &pflx);
+#elif defined(MU_ENABLE_OMP)
+void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
+             size_t &kstart, real_t &dt, buffer_1d_t<real_t> &dz,
+             buffer_1d_t<real_t> &t, buffer_1d_t<real_t> &rho,
+             buffer_1d_t<real_t> &p, buffer_1d_t<real_t> &qv,
+             buffer_1d_t<real_t> &qc, buffer_1d_t<real_t> &qi,
+             buffer_1d_t<real_t> &qr, buffer_1d_t<real_t> &qs,
+             buffer_1d_t<real_t> &qg, real_t &qnc, buffer_1d_t<real_t> &prr_gsp,
+             buffer_1d_t<real_t> &pri_gsp, buffer_1d_t<real_t> &prs_gsp,
+             buffer_1d_t<real_t> &prg_gsp, buffer_1d_t<real_t> &pflx);
+#else
+#error No implementation was selected. Options are: seq, omp
+#endif
