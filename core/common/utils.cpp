@@ -34,8 +34,8 @@ void utils_muphys::calc_dz(array_1d_t<real_t> &z, array_1d_t<real_t> &dz,
   }
 }
 
-void utils_muphys::calc_dz(buffer_1d_t<real_t> &z, buffer_1d_t<real_t> &dz,
-                           size_t &ncells, size_t &nlev) {
+void utils_muphys::calc_dz(buffer_1d_t<real_t> z, buffer_1d_t<real_t> &dz,
+                           size_t ncells, size_t nlev) {
   dz = new real_t[ncells * nlev]();
 
   array_2d_t<real_t> zh(nlev + 1, array_1d_t<real_t>(ncells));

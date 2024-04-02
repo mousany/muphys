@@ -94,7 +94,7 @@ void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
 
 /* read-in time-constant data fields without a time dimension */
 void io_muphys::input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
-                             const string input, size_t &ncells, size_t &nlev) {
+                             const string &input, size_t ncells, size_t nlev) {
   NcVar var;
   v = new real_t[ncells * nlev]();
   /*  access the input variable */
@@ -120,7 +120,7 @@ void io_muphys::input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
 }
 
 void io_muphys::input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
-                             const string input, size_t &ncells, size_t &nlev,
+                             const string &input, size_t ncells, size_t nlev,
                              size_t itime) {
   NcVar att = datafile.getVar(input);
   v = new real_t[ncells * nlev]();
@@ -184,9 +184,8 @@ void io_muphys::output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
 }
 
 void io_muphys::output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
-                              const string output, buffer_1d_t<real_t> &v,
-                              size_t &ncells, size_t &nlev,
-                              int &deflate_level) {
+                              const string &output, buffer_1d_t<real_t> v,
+                              size_t ncells, size_t nlev, int deflate_level) {
   // fortran:column major while c++ is row major
   NCreal_t ncreal_t;
   netCDF::NcVar var = datafile.addVar(output, ncreal_t, dims);
@@ -232,7 +231,7 @@ void io_muphys::read_fields(const string input_file, size_t &itime,
   datafile.close();
 }
 
-void io_muphys::read_fields(const std::string input_file, size_t &itime,
+void io_muphys::read_fields(const std::string &input_file, size_t &itime,
                             size_t &ncells, size_t &nlev,
                             buffer_1d_t<real_t> &z, buffer_1d_t<real_t> &t,
                             buffer_1d_t<real_t> &p, buffer_1d_t<real_t> &rho,
@@ -294,11 +293,11 @@ void io_muphys::write_fields(string output_file, size_t &ncells, size_t &nlev,
   datafile.close();
 }
 
-void io_muphys::write_fields(string output_file, size_t &ncells, size_t &nlev,
-                             buffer_1d_t<real_t> &t, buffer_1d_t<real_t> &qv,
-                             buffer_1d_t<real_t> &qc, buffer_1d_t<real_t> &qi,
-                             buffer_1d_t<real_t> &qr, buffer_1d_t<real_t> &qs,
-                             buffer_1d_t<real_t> &qg) {
+void io_muphys::write_fields(const string &output_file, size_t ncells,
+                             size_t nlev, buffer_1d_t<real_t> t,
+                             buffer_1d_t<real_t> qv, buffer_1d_t<real_t> qc,
+                             buffer_1d_t<real_t> qi, buffer_1d_t<real_t> qr,
+                             buffer_1d_t<real_t> qs, buffer_1d_t<real_t> qg) {
   NcFile datafile(output_file, NcFile::replace);
   NcDim ncells_dim = datafile.addDim("ncells", ncells);
   NcDim nlev_dim = datafile.addDim("height", nlev);

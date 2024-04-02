@@ -34,10 +34,10 @@ void input_vector(NcFile &datafile, array_1d_t<real_t> &v,
 void input_vector(NcFile &datafile, array_1d_t<real_t> &v,
                   const std::string input, size_t &ncells, size_t &nlev);
 void input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
-                  const std::string input, size_t &ncells, size_t &nlev,
+                  const std::string &input, size_t ncells, size_t nlev,
                   size_t itime);
 void input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
-                  const std::string input, size_t &ncells, size_t &nlev);
+                  const std::string &input, size_t ncells, size_t nlev);
 
 void output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
                    const std::string output, array_1d_t<real_t> &v,
@@ -47,8 +47,8 @@ void output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
                    array_1d_t<real_t> &v, size_t &ncells, size_t &nlev,
                    int &deflate_level);
 void output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
-                   const std::string output, buffer_1d_t<real_t> &v,
-                   size_t &ncells, size_t &nlev, int &deflate_level);
+                   const std::string &output, buffer_1d_t<real_t> v,
+                   size_t ncells, size_t nlev, int deflate_level);
 
 void read_fields(const std::string input_file, size_t &itime, size_t &ncells,
                  size_t &nlev, array_1d_t<real_t> &z, array_1d_t<real_t> &t,
@@ -56,7 +56,7 @@ void read_fields(const std::string input_file, size_t &itime, size_t &ncells,
                  array_1d_t<real_t> &qv, array_1d_t<real_t> &qc,
                  array_1d_t<real_t> &qi, array_1d_t<real_t> &qr,
                  array_1d_t<real_t> &qs, array_1d_t<real_t> &qg);
-void read_fields(const std::string input_file, size_t &itime, size_t &ncells,
+void read_fields(const std::string &input_file, size_t &itime, size_t &ncells,
                  size_t &nlev, buffer_1d_t<real_t> &z, buffer_1d_t<real_t> &t,
                  buffer_1d_t<real_t> &p, buffer_1d_t<real_t> &rho,
                  buffer_1d_t<real_t> &qv, buffer_1d_t<real_t> &qc,
@@ -73,11 +73,11 @@ void write_fields(const string output_file, const string input_file,
                   array_1d_t<real_t> &qv, array_1d_t<real_t> &qc,
                   array_1d_t<real_t> &qi, array_1d_t<real_t> &qr,
                   array_1d_t<real_t> &qs, array_1d_t<real_t> &qg);
-void write_fields(const string output_file, size_t &ncells, size_t &nlev,
-                  buffer_1d_t<real_t> &t, buffer_1d_t<real_t> &qv,
-                  buffer_1d_t<real_t> &qc, buffer_1d_t<real_t> &qi,
-                  buffer_1d_t<real_t> &qr, buffer_1d_t<real_t> &qs,
-                  buffer_1d_t<real_t> &qg);
+void write_fields(const string &output_file, size_t ncells, size_t nlev,
+                  buffer_1d_t<real_t> t, buffer_1d_t<real_t> qv,
+                  buffer_1d_t<real_t> qc, buffer_1d_t<real_t> qi,
+                  buffer_1d_t<real_t> qr, buffer_1d_t<real_t> qs,
+                  buffer_1d_t<real_t> qg);
 
 void log_time(int64_t value);
 } // namespace io_muphys
