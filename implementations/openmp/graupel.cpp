@@ -70,13 +70,12 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
              buffer_1d_t<real_t> &prg_gsp, buffer_1d_t<real_t> &pflx) {
   // std::cout << "sequential graupel" << std::endl;
 
-  array_2d_t<size_t> kmin(
-      nvec, array_1d_t<size_t>(np)); // first level with condensate
+  buffer_2d_t<size_t> kmin =
+      new size_t[nvec * np](); // first level with condensate
 
-  array_2d_t<real_t> vt(
-      nvec,
-      array_1d_t<real_t>(
-          np)); // terminal velocity for different hydrometeor categories
+  buffer_2d_t<real_t> vt =
+      new real_t[nvec * np](); // terminal velocity for different hydrometeor
+                               // categories
 
   // array_1d_t<t_qx_ptr>
   //     q{}; // vector of pointers to point to four hydrometeor inouts
@@ -109,46 +108,46 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
       // qp_ind = {0, 1, 2, 3}
       // ix = 0, qp_ind[0] = 0
       if (i == (ke - 1)) {
-        kmin[j][0] = ke + 1;
+        kmin[j * np] = ke + 1;
+        vt[j * np] = 0.0;
         prr_gsp[j] = 0.0;
-        vt[j][0] = 0.0;
       }
 
       if (qr[oned_vec_index] > qmin) {
-        kmin[j][0] = i;
+        kmin[j * np] = i;
       }
 
       // ix = 1, qp_ind[1] = 1
       if (i == (ke - 1)) {
-        kmin[j][1] = ke + 1;
+        kmin[j * np + 1] = ke + 1;
+        vt[j * np + 1] = 0.0;
         pri_gsp[j] = 0.0;
-        vt[j][1] = 0.0;
       }
 
       if (qi[oned_vec_index] > qmin) {
-        kmin[j][1] = i;
+        kmin[j * np + 1] = i;
       }
 
       // ix = 2, qp_ind[2] = 2
       if (i == (ke - 1)) {
-        kmin[j][2] = ke + 1;
+        kmin[j * np + 2] = ke + 1;
+        vt[j * np + 2] = 0.0;
         prs_gsp[j] = 0.0;
-        vt[j][2] = 0.0;
       }
 
       if (qs[oned_vec_index] > qmin) {
-        kmin[j][2] = i;
+        kmin[j * np + 2] = i;
       }
 
       // ix = 3, qp_ind[3] = 3
       if (i == (ke - 1)) {
-        kmin[j][3] = ke + 1;
+        kmin[j * np + 3] = ke + 1;
+        vt[j * np + 3] = 0.0;
         prg_gsp[j] = 0.0;
-        vt[j][3] = 0.0;
       }
 
       if (qg[oned_vec_index] > qmin) {
-        kmin[j][3] = i;
+        kmin[j * np + 3] = i;
       }
 
       if ((std::max({qc[oned_vec_index], qr[oned_vec_index], qs[oned_vec_index],
@@ -467,7 +466,7 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
       }
 
       size_t kp1 = std::min(ke - 1, k + 1);
-      if (k >= *std::min_element(kmin[iv].begin(), kmin[iv].end())) {
+      if (k >= *std::min_element(kmin + iv * np, kmin + iv * np + np)) {
         real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
         real_t qice =
             qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
@@ -483,47 +482,47 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 
         // qp_ind = {0, 1, 2, 3}
         // ix = 0, qp_ind[0] = 0
-        if (k >= kmin[iv][0]) {
+        if (k >= kmin[iv * np]) {
           real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
                                        t[oned_vec_index], qr[oned_vec_index]);
-          precip(params[0], update, zeta, vc, prr_gsp[iv], vt[iv][0],
+          precip(params[0], update, zeta, vc, prr_gsp[iv], vt[iv * np],
                  qr[oned_vec_index], qr[kp1 * ivend + iv], rho[oned_vec_index]);
           qr[oned_vec_index] = update[0];
           prr_gsp[iv] = update[1];
-          vt[iv][0] = update[2];
+          vt[iv * np] = update[2];
         }
 
         // ix = 1, qp_ind[1] = 1
-        if (k >= kmin[iv][1]) {
+        if (k >= kmin[iv * np + 1]) {
           real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
                                        t[oned_vec_index], qi[oned_vec_index]);
-          precip(params[1], update, zeta, vc, pri_gsp[iv], vt[iv][1],
+          precip(params[1], update, zeta, vc, pri_gsp[iv], vt[iv * np + 1],
                  qi[oned_vec_index], qi[kp1 * ivend + iv], rho[oned_vec_index]);
           qi[oned_vec_index] = update[0];
           pri_gsp[iv] = update[1];
-          vt[iv][1] = update[2];
+          vt[iv * np + 1] = update[2];
         }
 
         // ix = 2, qp_ind[2] = 2
-        if (k >= kmin[iv][2]) {
+        if (k >= kmin[iv * np + 2]) {
           real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
                                        t[oned_vec_index], qs[oned_vec_index]);
-          precip(params[2], update, zeta, vc, prs_gsp[iv], vt[iv][2],
+          precip(params[2], update, zeta, vc, prs_gsp[iv], vt[iv * np + 2],
                  qs[oned_vec_index], qs[kp1 * ivend + iv], rho[oned_vec_index]);
           qs[oned_vec_index] = update[0];
           prs_gsp[iv] = update[1];
-          vt[iv][2] = update[2];
+          vt[iv * np + 2] = update[2];
         }
 
         // ix = 3, qp_ind[3] = 3
-        if (k >= kmin[iv][3]) {
+        if (k >= kmin[iv * np + 3]) {
           real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
                                        t[oned_vec_index], qg[oned_vec_index]);
-          precip(params[3], update, zeta, vc, prg_gsp[iv], vt[iv][3],
+          precip(params[3], update, zeta, vc, prg_gsp[iv], vt[iv * np + 3],
                  qg[oned_vec_index], qg[kp1 * ivend + iv], rho[oned_vec_index]);
           qg[oned_vec_index] = update[0];
           prg_gsp[iv] = update[1];
-          vt[iv][3] = update[2];
+          vt[iv * np + 3] = update[2];
         }
 
         pflx[oned_vec_index] = prs_gsp[iv] + pri_gsp[iv] + prg_gsp[iv];
@@ -542,6 +541,9 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
       }
     }
   }
+
+  delete[] kmin;
+  delete[] vt;
 }
 
 #endif // MU_ENABLE_OMP
