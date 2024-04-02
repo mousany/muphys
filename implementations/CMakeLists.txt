@@ -1,9 +1,7 @@
 if(NOT MU_IMPL)
     message(FATAL_ERROR "No implementation was selected. Options are: seq, omp")
-endif()
-
 # add compile definitions and external dependecies based on options
-if ("${MU_IMPL}" STREQUAL "seq")
+elseif ("${MU_IMPL}" STREQUAL "seq")
     add_subdirectory(implementations/sequential)
     add_compile_definitions(MU_ENABLE_SEQ)
 elseif("${MU_IMPL}" STREQUAL "omp")

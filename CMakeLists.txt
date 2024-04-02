@@ -29,6 +29,17 @@ if (MU_ENABLE_SINGLE)
     add_compile_definitions(__SINGLE_PRECISION)
 endif ()
 
+if(NOT MU_IMPL)
+    message(FATAL_ERROR "No implementation was selected. Options are: seq, omp")
+# add compile definitions and external dependecies based on options
+elseif ("${MU_IMPL}" STREQUAL "seq")
+    add_compile_definitions(MU_ENABLE_SEQ)
+elseif("${MU_IMPL}" STREQUAL "omp")
+    add_compile_definitions(MU_ENABLE_OMP)
+else()
+    message(FATAL_ERROR "${MU_IMPL} is not a valid configuration.")
+endif ()
+
 # add local sources
 add_subdirectory(core)
 add_subdirectory(io)

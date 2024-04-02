@@ -9,6 +9,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // ---------------------------------------------------------------
 //
+#if defined(MU_ENABLE_SEQ)
+
 #include "core/common/graupel.hpp"
 #include <algorithm>
 #include <iostream>
@@ -338,3 +340,5 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
     }
   }
 }
+
+#endif // MU_ENABLE_SEQ
