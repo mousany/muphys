@@ -14,6 +14,7 @@
 
 #include "core/common/graupel.hpp"
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <numeric>
 
@@ -109,6 +110,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
 #pragma omp parallel for
   for (size_t j = ivstart; j < ivend; j++) {
+    std::unique_ptr<real_t[]> sx2x{new real_t[nx * nx]()}; // conversion rates
     for (size_t i = ke - 1; i < ke; --i) {
       size_t oned_vec_index = i * ivend + j;
 
@@ -168,8 +170,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
                               qmin; // is snow, ice or graupel present?
 
         {
-          std::vector<std::vector<real_t>> sx2x(
-              nx, std::vector<real_t>(nx, 0.0)); // conversion rates // TODO
+          memset(sx2x.get(), 0, nx * nx * sizeof(real_t));
 
           real_t dvsw = qv[oned_vec_index] -
                         qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
@@ -180,18 +181,19 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           real_t l_snow =
               snow_lambda(rho[oned_vec_index], qs[oned_vec_index], n_snow);
 
-          sx2x[lqc][lqr] = cloud_to_rain(t[oned_vec_index], qc[oned_vec_index],
-                                         qr[oned_vec_index], qnc);
-          sx2x[lqr][lqv] =
+          sx2x[lqc * nx + lqr] = cloud_to_rain(
+              t[oned_vec_index], qc[oned_vec_index], qr[oned_vec_index], qnc);
+          sx2x[lqr * nx + lqv] =
               rain_to_vapor(t[oned_vec_index], rho[oned_vec_index],
                             qc[oned_vec_index], qr[oned_vec_index], dvsw, dt);
-          sx2x[lqc][lqi] = cloud_x_ice(t[oned_vec_index], qc[oned_vec_index],
-                                       qi[oned_vec_index], dt);
-          sx2x[lqi][lqc] = -std::fmin(sx2x[lqc][lqi], 0.0);
-          sx2x[lqc][lqi] = std::fmax(sx2x[lqc][lqi], 0.0);
-          sx2x[lqc][lqs] = cloud_to_snow(t[oned_vec_index], qc[oned_vec_index],
-                                         qs[oned_vec_index], n_snow, l_snow);
-          sx2x[lqc][lqg] =
+          sx2x[lqc * nx + lqi] = cloud_x_ice(
+              t[oned_vec_index], qc[oned_vec_index], qi[oned_vec_index], dt);
+          sx2x[lqi * nx + lqc] = -std::fmin(sx2x[lqc * nx + lqi], 0.0);
+          sx2x[lqc * nx + lqi] = std::fmax(sx2x[lqc * nx + lqi], 0.0);
+          sx2x[lqc * nx + lqs] =
+              cloud_to_snow(t[oned_vec_index], qc[oned_vec_index],
+                            qs[oned_vec_index], n_snow, l_snow);
+          sx2x[lqc * nx + lqg] =
               cloud_to_graupel(t[oned_vec_index], rho[oned_vec_index],
                                qc[oned_vec_index], qg[oned_vec_index]);
 
@@ -207,36 +209,37 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
               eta = deposition_factor(
                   t[oned_vec_index],
                   qvsi); // neglect cloud depth cor. from gcsp_graupel
-              sx2x[lqv][lqi] =
+              sx2x[lqv * nx + lqi] =
                   vapor_x_ice(qi[oned_vec_index], m_ice, eta, dvsi, dt);
-              sx2x[lqi][lqv] = -std::fmin(sx2x[lqv][lqi], 0.0);
-              sx2x[lqv][lqi] = std::fmax(sx2x[lqv][lqi], 0.0);
-              ice_dep = std::fmin(sx2x[lqv][lqi], dvsi / dt);
+              sx2x[lqi * nx + lqv] = -std::fmin(sx2x[lqv * nx + lqi], 0.0);
+              sx2x[lqv * nx + lqi] = std::fmax(sx2x[lqv * nx + lqi], 0.0);
+              ice_dep = std::fmin(sx2x[lqv * nx + lqi], dvsi / dt);
 
-              sx2x[lqi][lqs] = deposition_auto_conversion(qi[oned_vec_index],
-                                                          m_ice, ice_dep);
-              sx2x[lqi][lqs] =
-                  sx2x[lqi][lqs] +
+              sx2x[lqi * nx + lqs] = deposition_auto_conversion(
+                  qi[oned_vec_index], m_ice, ice_dep);
+              sx2x[lqi * nx + lqs] =
+                  sx2x[lqi * nx + lqs] +
                   ice_to_snow(qi[oned_vec_index], n_snow, l_snow, x_ice);
-              sx2x[lqi][lqg] =
+              sx2x[lqi * nx + lqg] =
                   ice_to_graupel(rho[oned_vec_index], qr[oned_vec_index],
                                  qg[oned_vec_index], qi[oned_vec_index], x_ice);
-              sx2x[lqs][lqg] =
+              sx2x[lqs * nx + lqg] =
                   snow_to_graupel(t[oned_vec_index], rho[oned_vec_index],
                                   qc[oned_vec_index], qs[oned_vec_index]);
-              sx2x[lqr][lqg] = rain_to_graupel(
+              sx2x[lqr * nx + lqg] = rain_to_graupel(
                   t[oned_vec_index], rho[oned_vec_index], qc[oned_vec_index],
                   qr[oned_vec_index], qi[oned_vec_index], qs[oned_vec_index],
                   m_ice, dvsw, dt);
             }
-            sx2x[lqv][lqi] =
-                sx2x[lqv][lqi] +
+            sx2x[lqv * nx + lqi] =
+                sx2x[lqv * nx + lqi] +
                 ice_deposition_nucleation(t[oned_vec_index], qc[oned_vec_index],
                                           qi[oned_vec_index], n_ice, dvsi, dt);
           } else {
-            sx2x[lqc][lqr] = sx2x[lqc][lqr] + sx2x[lqc][lqs] + sx2x[lqc][lqg];
-            sx2x[lqc][lqs] = 0.0;
-            sx2x[lqc][lqg] = 0.0;
+            sx2x[lqc * nx + lqr] = sx2x[lqc * nx + lqr] + sx2x[lqc * nx + lqs] +
+                                   sx2x[lqc * nx + lqg];
+            sx2x[lqc * nx + lqs] = 0.0;
+            sx2x[lqc * nx + lqg] = 0.0;
             ice_dep = 0.0;
             eta = 0.0;
           }
@@ -244,21 +247,21 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if (is_sig_present) {
             real_t dvsw0 =
                 qv[oned_vec_index] - qsat_rho(tmelt, rho[oned_vec_index]);
-            sx2x[lqv][lqs] =
+            sx2x[lqv * nx + lqs] =
                 vapor_x_snow(t[oned_vec_index], p[oned_vec_index],
                              rho[oned_vec_index], qs[oned_vec_index], n_snow,
                              l_snow, eta, ice_dep, dvsw, dvsi, dvsw0, dt);
-            sx2x[lqs][lqv] = -std::fmin(sx2x[lqv][lqs], 0.0);
-            sx2x[lqv][lqs] = std::fmax(sx2x[lqv][lqs], 0.0);
-            sx2x[lqv][lqg] = vapor_x_graupel(
+            sx2x[lqs * nx + lqv] = -std::fmin(sx2x[lqv * nx + lqs], 0.0);
+            sx2x[lqv * nx + lqs] = std::fmax(sx2x[lqv * nx + lqs], 0.0);
+            sx2x[lqv * nx + lqg] = vapor_x_graupel(
                 t[oned_vec_index], p[oned_vec_index], rho[oned_vec_index],
                 qg[oned_vec_index], dvsw, dvsi, dvsw0, dt);
-            sx2x[lqg][lqv] = -std::fmin(sx2x[lqv][lqg], 0.0);
-            sx2x[lqv][lqg] = std::fmax(sx2x[lqv][lqg], 0.0);
-            sx2x[lqs][lqr] =
+            sx2x[lqg * nx + lqv] = -std::fmin(sx2x[lqv * nx + lqg], 0.0);
+            sx2x[lqv * nx + lqg] = std::fmax(sx2x[lqv * nx + lqg], 0.0);
+            sx2x[lqs * nx + lqr] =
                 snow_to_rain(t[oned_vec_index], p[oned_vec_index],
                              rho[oned_vec_index], dvsw0, qs[oned_vec_index]);
-            sx2x[lqg][lqr] =
+            sx2x[lqg * nx + lqr] =
                 graupel_to_rain(t[oned_vec_index], p[oned_vec_index],
                                 rho[oned_vec_index], dvsw0, qg[oned_vec_index]);
           }
@@ -273,7 +276,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if ((is_sig_present) or (5 == lqc) or (5 == lqv) or (5 == lqr)) {
 
             for (size_t i = 0; i < nx; i++) {
-              sink[5] = sink[5] + sx2x[5][i];
+              sink[5] = sink[5] + sx2x[5 * nx + i];
             }
             stot = qv[oned_vec_index] / dt;
 
@@ -281,8 +284,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
               real_t nextSink = 0.0;
 
               for (size_t i = 0; i < nx; i++) {
-                sx2x[5][i] = sx2x[5][i] * stot / sink[5];
-                nextSink = nextSink + sx2x[5][i];
+                sx2x[5 * nx + i] = sx2x[5 * nx + i] * stot / sink[5];
+                nextSink = nextSink + sx2x[5 * nx + i];
               }
               sink[5] = nextSink;
             }
@@ -293,7 +296,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if ((is_sig_present) or (4 == lqc) or (4 == lqv) or (4 == lqr)) {
 
             for (size_t i = 0; i < nx; i++) {
-              sink[4] = sink[4] + sx2x[4][i];
+              sink[4] = sink[4] + sx2x[4 * nx + i];
             }
             stot = qc[oned_vec_index] / dt;
 
@@ -301,8 +304,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
               real_t nextSink = 0.0;
 
               for (size_t i = 0; i < nx; i++) {
-                sx2x[4][i] = sx2x[4][i] * stot / sink[4];
-                nextSink = nextSink + sx2x[4][i];
+                sx2x[4 * nx + i] = sx2x[4 * nx + i] * stot / sink[4];
+                nextSink = nextSink + sx2x[4 * nx + i];
               }
               sink[4] = nextSink;
             }
@@ -313,7 +316,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if ((is_sig_present) or (0 == lqc) or (0 == lqv) or (0 == lqr)) {
 
             for (size_t i = 0; i < nx; i++) {
-              sink[0] = sink[0] + sx2x[0][i];
+              sink[0] = sink[0] + sx2x[0 * nx + i];
             }
             stot = qr[oned_vec_index] / dt;
 
@@ -321,8 +324,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
               real_t nextSink = 0.0;
 
               for (size_t i = 0; i < nx; i++) {
-                sx2x[0][i] = sx2x[0][i] * stot / sink[0];
-                nextSink = nextSink + sx2x[0][i];
+                sx2x[0 * nx + i] = sx2x[0 * nx + i] * stot / sink[0];
+                nextSink = nextSink + sx2x[0 * nx + i];
               }
               sink[0] = nextSink;
             }
@@ -333,7 +336,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if ((is_sig_present) or (2 == lqc) or (2 == lqv) or (2 == lqr)) {
 
             for (size_t i = 0; i < nx; i++) {
-              sink[2] = sink[2] + sx2x[2][i];
+              sink[2] = sink[2] + sx2x[2 * nx + i];
             }
             stot = qs[oned_vec_index] / dt;
 
@@ -341,8 +344,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
               real_t nextSink = 0.0;
 
               for (size_t i = 0; i < nx; i++) {
-                sx2x[2][i] = sx2x[2][i] * stot / sink[2];
-                nextSink = nextSink + sx2x[2][i];
+                sx2x[2 * nx + i] = sx2x[2 * nx + i] * stot / sink[2];
+                nextSink = nextSink + sx2x[2 * nx + i];
               }
               sink[2] = nextSink;
             }
@@ -353,7 +356,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if ((is_sig_present) or (1 == lqc) or (1 == lqv) or (1 == lqr)) {
 
             for (size_t i = 0; i < nx; i++) {
-              sink[1] = sink[1] + sx2x[1][i];
+              sink[1] = sink[1] + sx2x[1 * nx + i];
             }
             stot = qi[oned_vec_index] / dt;
 
@@ -361,8 +364,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
               real_t nextSink = 0.0;
 
               for (size_t i = 0; i < nx; i++) {
-                sx2x[1][i] = sx2x[1][i] * stot / sink[1];
-                nextSink = nextSink + sx2x[1][i];
+                sx2x[1 * nx + i] = sx2x[1 * nx + i] * stot / sink[1];
+                nextSink = nextSink + sx2x[1 * nx + i];
               }
               sink[1] = nextSink;
             }
@@ -373,7 +376,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if ((is_sig_present) or (3 == lqc) or (3 == lqv) or (3 == lqr)) {
 
             for (size_t i = 0; i < nx; i++) {
-              sink[3] = sink[3] + sx2x[3][i];
+              sink[3] = sink[3] + sx2x[3 * nx + i];
             }
             stot = qg[oned_vec_index] / dt;
 
@@ -381,8 +384,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
               real_t nextSink = 0.0;
 
               for (size_t i = 0; i < nx; i++) {
-                sx2x[3][i] = sx2x[3][i] * stot / sink[3];
-                nextSink = nextSink + sx2x[3][i];
+                sx2x[3 * nx + i] = sx2x[3 * nx + i] * stot / sink[3];
+                nextSink = nextSink + sx2x[3 * nx + i];
               }
               sink[3] = nextSink;
             }
@@ -392,7 +395,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           // ix = 0, qx_ind[0] = 5
           real_t sx2x_sum = 0;
           for (size_t i = 0; i < nx; i++) {
-            sx2x_sum = sx2x_sum + sx2x[i][5];
+            sx2x_sum = sx2x_sum + sx2x[i * nx + 5];
           }
           dqdt[5] = sx2x_sum - sink[5];
           qv[oned_vec_index] =
@@ -401,7 +404,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           // ix = 1, qx_ind[1] = 4
           sx2x_sum = 0;
           for (size_t i = 0; i < nx; i++) {
-            sx2x_sum = sx2x_sum + sx2x[i][4];
+            sx2x_sum = sx2x_sum + sx2x[i * nx + 4];
           }
           dqdt[4] = sx2x_sum - sink[4];
           qc[oned_vec_index] =
@@ -410,7 +413,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           // ix = 2, qx_ind[2] = 0
           sx2x_sum = 0;
           for (size_t i = 0; i < nx; i++) {
-            sx2x_sum = sx2x_sum + sx2x[i][0];
+            sx2x_sum = sx2x_sum + sx2x[i * nx + 0];
           }
           dqdt[0] = sx2x_sum - sink[0];
           qr[oned_vec_index] =
@@ -419,7 +422,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           // ix = 3, qx_ind[3] = 2
           sx2x_sum = 0;
           for (size_t i = 0; i < nx; i++) {
-            sx2x_sum = sx2x_sum + sx2x[i][2];
+            sx2x_sum = sx2x_sum + sx2x[i * nx + 2];
           }
           dqdt[2] = sx2x_sum - sink[2];
           qs[oned_vec_index] =
@@ -428,7 +431,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           // ix = 4, qx_ind[4] = 1
           sx2x_sum = 0;
           for (size_t i = 0; i < nx; i++) {
-            sx2x_sum = sx2x_sum + sx2x[i][1];
+            sx2x_sum = sx2x_sum + sx2x[i * nx + 1];
           }
           dqdt[1] = sx2x_sum - sink[1];
           qi[oned_vec_index] =
@@ -437,7 +440,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           // ix = 5, qx_ind[5] = 3
           sx2x_sum = 0;
           for (size_t i = 0; i < nx; i++) {
-            sx2x_sum = sx2x_sum + sx2x[i][3];
+            sx2x_sum = sx2x_sum + sx2x[i * nx + 3];
           }
           dqdt[3] = sx2x_sum - sink[3];
           qg[oned_vec_index] =
@@ -464,12 +467,11 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   size_t k_end = (lrain) ? ke : kstart - 1;
 #pragma omp parallel for
   for (size_t iv = ivstart; iv < ivend; iv++) {
-    std::vector<real_t> eflx( // TODO
-        nvec);                // internal energy flux from precipitation (W/m2 )
+    real_t elfx_iv; // internal energy flux from precipitation (W/m2 )
     for (size_t k = kstart; k < k_end; k++) {
       size_t oned_vec_index = k * ivend + iv;
       if (k == kstart) {
-        eflx[iv] = 0.0;
+        elfx_iv = 0.0;
       }
 
       size_t kp1 = std::min(ke - 1, k + 1);
@@ -482,7 +484,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         real_t e_int =
             internal_energy(t[oned_vec_index], qv[oned_vec_index], qliq, qice,
                             rho[oned_vec_index], dz[oned_vec_index]) +
-            eflx[iv];
+            elfx_iv;
         real_t zeta = dt / (2.0 * dz[oned_vec_index]);
         real_t xrho = std::sqrt(rho_00 / rho[oned_vec_index]);
 
@@ -527,7 +529,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         }
 
         pflx[oned_vec_index] = prs_gsp[iv] + pri_gsp[iv] + prg_gsp[iv];
-        eflx[iv] =
+        elfx_iv =
             dt * (prr_gsp[iv] * (clw * t[oned_vec_index] -
                                  cvd * t[kp1 * ivend + iv] - lvc) +
                   pflx[oned_vec_index] * (ci * t[oned_vec_index] -
@@ -535,7 +537,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         pflx[oned_vec_index] = pflx[oned_vec_index] + prr_gsp[iv];
         qliq = qc[oned_vec_index] + qr[oned_vec_index];
         qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
-        e_int = e_int - eflx[iv];
+        e_int = e_int - elfx_iv;
         t[oned_vec_index] =
             T_from_internal_energy(e_int, qv[oned_vec_index], qliq, qice,
                                    rho[oned_vec_index], dz[oned_vec_index]);

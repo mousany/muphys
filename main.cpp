@@ -48,7 +48,11 @@ int main(int argc, char *argv[]) {
   const string input_file = file;
   io_muphys::read_fields(input_file, itime, ncells, nlev, z, t, p, rho, qv, qc,
                          qi, qr, qs, qg);
+#if defined(MU_ENABLE_SEQ)
+  utils_muphys::calc_dz(z, dz, ncells, nlev);
+#else
   utils_muphys::calc_dz(z.get(), dz, ncells, nlev);
+#endif
 
 #if defined(MU_ENABLE_SEQ)
   prr_gsp.resize(ncells, 0.0);
@@ -74,17 +78,27 @@ int main(int argc, char *argv[]) {
 
   auto start_time = std::chrono::steady_clock::now();
 
+#if defined(MU_ENABLE_SEQ)
+  graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz, t, rho, p, qv, qc, qi, qr, qs,
+          qg, qnc_1, prr_gsp, pri_gsp, prs_gsp, prg_gsp, pflx);
+#else
   graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz.get(), t.get(), rho.get(),
           p.get(), qv.get(), qc.get(), qi.get(), qr.get(), qs.get(), qg.get(),
           qnc_1, prr_gsp.get(), pri_gsp.get(), prs_gsp.get(), prg_gsp.get(),
           pflx.get());
+#endif
 
   auto end_time = std::chrono::steady_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
       end_time - start_time);
 
+#if defined(MU_ENABLE_SEQ)
+  io_muphys::write_fields(output_file, ncells, nlev, t, qv, qc, qi, qr, qs, qg);
+#else
   io_muphys::write_fields(output_file, ncells, nlev, t.get(), qv.get(),
                           qc.get(), qi.get(), qr.get(), qs.get(), qg.get());
+#endif
+
   std::cout << "time taken : " << duration.count() << " milliseconds"
             << std::endl;
 

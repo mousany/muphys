@@ -247,6 +247,47 @@ void io_muphys::write_fields(const string &output_file, size_t ncells,
   datafile.close();
 }
 
+static void copy_coordinate_variables(NcFile &datafile, NcFile &inputfile,
+                                      std::vector<std::string> coordinates) {
+  for (auto &coordinate_name : coordinates) {
+    auto coordinate = inputfile.getVar(coordinate_name);
+    /* copy possible new dimensions from input coordinates to the output
+     * befor adding the related data variables */
+    for (NcDim &dim : coordinate.getDims()) {
+      auto currentDims = datafile.getDims();
+      /* map.contains() would be better, but requires c++20 */
+      if (auto search = currentDims.find(dim.getName());
+          search == currentDims.end())
+        datafile.addDim(dim.getName(), dim.getSize());
+    }
+    auto var = datafile.addVar(coordinate.getName(), coordinate.getType(),
+                               coordinate.getDims());
+
+    for (auto &[attribute_name, attribute] : coordinate.getAtts()) {
+      std::string dataValues = "default";
+      attribute.getValues(dataValues);
+      var.putAtt(attribute.getName(), attribute.getType(),
+                 attribute.getAttLength(), dataValues.c_str());
+    }
+
+    /* Calculate the total size of the varibale */
+    auto dimensions = coordinate.getDims();
+    struct Prod {
+      void operator()(NcDim n) { prod *= n.getSize(); }
+      size_t prod{1};
+    };
+    size_t totalSize =
+        std::for_each(dimensions.cbegin(), dimensions.cend(), Prod()).prod;
+
+    /* Create a one-dimensional vector to store its values */
+    std::vector<real_t> oneDimensionalVariable(totalSize);
+
+    /* Copy the original values to the output */
+    coordinate.getVar(oneDimensionalVariable.data());
+    var.putVar(oneDimensionalVariable.data());
+  }
+}
+
 #if defined(MU_ENABLE_SEQ)
 void io_muphys::write_fields(string output_file, string input_file,
                              size_t &ncells, size_t &nlev,
@@ -296,47 +337,6 @@ void io_muphys::write_fields(string output_file, string input_file,
   datafile.close();
 }
 #endif
-
-static void copy_coordinate_variables(NcFile &datafile, NcFile &inputfile,
-                                      std::vector<std::string> coordinates) {
-  for (auto &coordinate_name : coordinates) {
-    auto coordinate = inputfile.getVar(coordinate_name);
-    /* copy possible new dimensions from input coordinates to the output
-     * befor adding the related data variables */
-    for (NcDim &dim : coordinate.getDims()) {
-      auto currentDims = datafile.getDims();
-      /* map.contains() would be better, but requires c++20 */
-      if (auto search = currentDims.find(dim.getName());
-          search == currentDims.end())
-        datafile.addDim(dim.getName(), dim.getSize());
-    }
-    auto var = datafile.addVar(coordinate.getName(), coordinate.getType(),
-                               coordinate.getDims());
-
-    for (auto &[attribute_name, attribute] : coordinate.getAtts()) {
-      std::string dataValues = "default";
-      attribute.getValues(dataValues);
-      var.putAtt(attribute.getName(), attribute.getType(),
-                 attribute.getAttLength(), dataValues.c_str());
-    }
-
-    /* Calculate the total size of the varibale */
-    auto dimensions = coordinate.getDims();
-    struct Prod {
-      void operator()(NcDim n) { prod *= n.getSize(); }
-      size_t prod{1};
-    };
-    size_t totalSize =
-        std::for_each(dimensions.cbegin(), dimensions.cend(), Prod()).prod;
-
-    /* Create a one-dimensional vector to store its values */
-    std::vector<real_t> oneDimensionalVariable(totalSize);
-
-    /* Copy the original values to the output */
-    coordinate.getVar(oneDimensionalVariable.data());
-    var.putVar(oneDimensionalVariable.data());
-  }
-}
 
 void io_muphys::log_time(int64_t value) {
   std::ofstream time_file;
