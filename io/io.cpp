@@ -190,9 +190,9 @@ void io_muphys::output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
   NCreal_t ncreal_t;
   netCDF::NcVar var = datafile.addVar(output, ncreal_t, dims);
 
-  for (size_t i = 0; i < nlev; ++i) {
-    var.putVar({i, 0}, {1, ncells}, &v[i * ncells]);
-  }
+  var.putVar({0, 0}, {nlev, ncells}, {1, 1},
+             {static_cast<ptrdiff_t>(ncells), 1}, v);
+
   if (deflate_level > 0) {
     var.setCompression(true, false, deflate_level);
   }

@@ -77,6 +77,17 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
       new real_t[nvec * np](); // terminal velocity for different hydrometeor
                                // categories
 
+  // nvec = ncells
+  // ivbeg = 0, ivend = ncells
+  // kbeg = 0, kend = nlev
+
+  // before:
+  // |------ ncells ------|
+  // |
+  // nlev
+  // |
+  // |
+
   // array_1d_t<t_qx_ptr>
   //     q{}; // vector of pointers to point to four hydrometeor inouts
   // array_1d_t<real_t> emptyArray;
