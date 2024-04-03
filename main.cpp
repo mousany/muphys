@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
   string file;
   string output_file = "output.nc";
   size_t itime;
-  real_t dt, qnc, qnc_1;
+  real_t dt, qnc;
   io_muphys::parse_args(file, itime, dt, qnc, argc, argv);
 
   size_t ncells, nlev;
@@ -46,12 +46,9 @@ int main(int argc, char *argv[]) {
 #error No implementation was selected. Options are: seq, omp
 #endif
 
-  // start-end indices
-  size_t kend, kbeg, ivend, ivbeg, nvec;
+  io_muphys::read_fields(file, itime, ncells, nlev, z, t, p, rho, qv, qc, qi,
+                         qr, qs, qg);
 
-  const string input_file = file;
-  io_muphys::read_fields(input_file, itime, ncells, nlev, z, t, p, rho, qv, qc,
-                         qi, qr, qs, qg);
   utils_muphys::calc_dz(z, dz, ncells, nlev);
 
 #if defined(MU_ENABLE_SEQ)
@@ -70,17 +67,10 @@ int main(int argc, char *argv[]) {
 #error No implementation was selected. Options are: seq, omp
 #endif
 
-  kbeg = 0;
-  kend = nlev;
-  ivbeg = 0;
-  ivend = ncells;
-  nvec = ncells;
-  qnc_1 = qnc;
-
   auto start_time = std::chrono::steady_clock::now();
 
-  graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz, t, rho, p, qv, qc, qi, qr, qs,
-          qg, qnc_1, prr_gsp, pri_gsp, prs_gsp, prg_gsp, pflx);
+  graupel(ncells, nlev, 0, ncells, 0, dt, dz, t, rho, p, qv, qc, qi, qr, qs, qg,
+          qnc, prr_gsp, pri_gsp, prs_gsp, prg_gsp, pflx);
 
   auto end_time = std::chrono::steady_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
