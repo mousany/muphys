@@ -108,8 +108,9 @@ void io_muphys::input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
   }
   /*  read-in input field values */
   try {
-    var.getVar({0, 0}, {nlev, ncells}, {1, 1},
-               {1, static_cast<ptrdiff_t>(nlev)}, v);
+    array_1d_t<size_t> startp = {0, 0};
+    array_1d_t<size_t> count = {nlev, ncells};
+    var.getVar(startp, count, v);
   } catch (NcNotVar &e) {
     cout << "FAILURE in reading values from " << input
          << " (no time dimensions) *******" << endl;
@@ -124,10 +125,12 @@ void io_muphys::input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
   NcVar att = datafile.getVar(input);
   v = new real_t[ncells * nlev]();
   try {
-    att.getVar({itime, 0, 0}, {1, nlev, ncells}, {1, 1, 1},
-               {static_cast<ptrdiff_t>(nlev * ncells), 1,
-                static_cast<ptrdiff_t>(nlev)},
-               v);
+    if (att.isNull()) {
+      throw NC_ERR;
+    }
+    array_1d_t<size_t> startp = {itime, 0, 0};
+    array_1d_t<size_t> count = {1, nlev, ncells};
+    att.getVar(startp, count, v);
   } catch (NcException &e) {
     e.what();
     cout << "FAILURE in reading " << input << " **************************"
@@ -187,8 +190,8 @@ void io_muphys::output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
   NCreal_t ncreal_t;
   netCDF::NcVar var = datafile.addVar(output, ncreal_t, dims);
 
-  var.putVar({0, 0}, {nlev, ncells}, {1, 1}, {1, static_cast<ptrdiff_t>(nlev)},
-             v);
+  var.putVar({0, 0}, {nlev, ncells}, {1, 1},
+             {static_cast<ptrdiff_t>(ncells), 1}, v);
 
   if (deflate_level > 0) {
     var.setCompression(true, false, deflate_level);

@@ -114,7 +114,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 #pragma omp parallel for
   for (size_t j = ivstart; j < ivend; j++) {
     for (size_t i = ke - 1; i < ke; --i) {
-      size_t oned_vec_index = i + j * ke;
+      size_t oned_vec_index = i * ivend + j;
 
       // qp_ind = {0, 1, 2, 3}
       // ix = 0, qp_ind[0] = 0
@@ -471,7 +471,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
     array_1d_t<real_t> eflx(
         nvec); // internal energy flux from precipitation (W/m2 )
     for (size_t k = kstart; k < k_end; k++) {
-      size_t oned_vec_index = k + iv * ke;
+      size_t oned_vec_index = k * ivend + iv;
       if (k == kstart) {
         eflx[iv] = 0.0;
       }
@@ -499,7 +499,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
                                        t[oned_vec_index], qr[oned_vec_index]);
           precip(params[0], qr[oned_vec_index], prr_gsp[iv], vt[iv * np], zeta,
                  vc, prr_gsp[iv], vt[iv * np], qr[oned_vec_index],
-                 qr[kp1 + iv * ke], rho[oned_vec_index]);
+                 qr[kp1 * ivend + iv], rho[oned_vec_index]);
         }
 
         // ix = 1, qp_ind[1] = 1
@@ -508,7 +508,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
                                        t[oned_vec_index], qi[oned_vec_index]);
           precip(params[1], qi[oned_vec_index], pri_gsp[iv], vt[iv * np + 1],
                  zeta, vc, pri_gsp[iv], vt[iv * np + 1], qi[oned_vec_index],
-                 qi[kp1 + iv * ke], rho[oned_vec_index]);
+                 qi[kp1 * ivend + iv], rho[oned_vec_index]);
         }
 
         // ix = 2, qp_ind[2] = 2
@@ -517,7 +517,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
                                        t[oned_vec_index], qs[oned_vec_index]);
           precip(params[2], qs[oned_vec_index], prs_gsp[iv], vt[iv * np + 2],
                  zeta, vc, prs_gsp[iv], vt[iv * np + 2], qs[oned_vec_index],
-                 qs[kp1 + iv * ke], rho[oned_vec_index]);
+                 qs[kp1 * ivend + iv], rho[oned_vec_index]);
         }
 
         // ix = 3, qp_ind[3] = 3
@@ -526,15 +526,15 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
                                        t[oned_vec_index], qg[oned_vec_index]);
           precip(params[3], qg[oned_vec_index], prg_gsp[iv], vt[iv * np + 3],
                  zeta, vc, prg_gsp[iv], vt[iv * np + 3], qg[oned_vec_index],
-                 qg[kp1 + iv * ke], rho[oned_vec_index]);
+                 qg[kp1 * ivend + iv], rho[oned_vec_index]);
         }
 
         pflx[oned_vec_index] = prs_gsp[iv] + pri_gsp[iv] + prg_gsp[iv];
         eflx[iv] =
-            dt * (prr_gsp[iv] *
-                      (clw * t[oned_vec_index] - cvd * t[kp1 + iv * ke] - lvc) +
-                  pflx[oned_vec_index] *
-                      (ci * t[oned_vec_index] - cvd * t[kp1 + iv * ke] - lsc));
+            dt * (prr_gsp[iv] * (clw * t[oned_vec_index] -
+                                 cvd * t[kp1 * ivend + iv] - lvc) +
+                  pflx[oned_vec_index] * (ci * t[oned_vec_index] -
+                                          cvd * t[kp1 * ivend + iv] - lsc));
         pflx[oned_vec_index] = pflx[oned_vec_index] + prr_gsp[iv];
         qliq = qc[oned_vec_index] + qr[oned_vec_index];
         qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
