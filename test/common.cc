@@ -658,15 +658,28 @@ TEST_F(MuphysTest, TransitionTestSuite_VaporXIce) {
 }
 
 TEST(UtilsTestSuite, CalcDz) {
+#if defined(MU_ENABLE_SEQ)
   array_1d_t<real_t> z = {1.0, -2.0, 1.0, 4.0, 5.0, 6.0};
   array_1d_t<real_t> dz;
+#else
+  std::unique_ptr<real_t[]> z{new real_t[6]{1.0, -2.0, 1.0, 4.0, 5.0, 6.0}};
+  std::unique_ptr<real_t[]> dz;
+#endif
   size_t ncells = 3;
   size_t nlev = 2;
+#if defined(MU_ENABLE_SEQ)
   array_1d_t<real_t> expected = {-3, -7, -5, -3, -7, -5};
+#else
+  std::unique_ptr<real_t[]> expected{new real_t[6]{-3, -7, -5, -3, -7, -5}};
+#endif
 
+#if defined(MU_ENABLE_SEQ)
   utils_muphys::calc_dz(z, dz, ncells, nlev);
-
   EXPECT_EQ(dz.size(), ncells * nlev);
-  for (size_t i = 0; i < dz.size(); i++)
+#else
+  utils_muphys::calc_dz(z.get(), dz, ncells, nlev);
+#endif
+
+  for (size_t i = 0; i < ncells * nlev; i++)
     EXPECT_DOUBLE_EQ(dz[i], expected[i]);
 }

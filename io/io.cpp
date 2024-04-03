@@ -45,11 +45,19 @@ void io_muphys::parse_args(string &file, size_t &itime, real_t &dt, real_t &qnc,
   cout << "qnc: " << qnc << endl;
 }
 
+#if defined(MU_ENABLE_SEQ)
 /* read-in time-constant data fields without a time dimension */
 void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
                              const string input, size_t &ncells, size_t &nlev) {
-  NcVar var;
   v.resize(ncells * nlev);
+#else
+/* read-in time-constant data fields without a time dimension */
+void io_muphys::input_vector(NcFile &datafile, std::unique_ptr<real_t[]> &v,
+                             const string &input, size_t ncells, size_t nlev) {
+  v.reset(new real_t[ncells * nlev]());
+#endif
+
+  NcVar var;
   /*  access the input variable */
   try {
     var = datafile.getVar(input);
@@ -61,9 +69,11 @@ void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
   }
   /*  read-in input field values */
   try {
-    array_1d_t<size_t> startp = {0, 0};
-    array_1d_t<size_t> count = {nlev, ncells};
-    var.getVar(startp, count, v.data());
+#if defined(MU_ENABLE_SEQ)
+    var.getVar({0, 0}, {nlev, ncells}, v.data());
+#else
+    var.getVar({0, 0}, {nlev, ncells}, v.get());
+#endif
   } catch (NcNotVar &e) {
     cout << "FAILURE in reading values from " << input
          << " (no time dimensions) *******" << endl;
@@ -72,65 +82,29 @@ void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
   }
 }
 
+#if defined(MU_ENABLE_SEQ)
 void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
                              const string input, size_t &ncells, size_t &nlev,
                              size_t itime) {
-  NcVar att = datafile.getVar(input);
-  try {
-    v.resize(ncells * nlev);
-    if (att.isNull()) {
-      throw NC_ERR;
-    }
-    array_1d_t<size_t> startp = {itime, 0, 0};
-    array_1d_t<size_t> count = {1, nlev, ncells};
-    att.getVar(startp, count, v.data());
-  } catch (NcException &e) {
-    e.what();
-    cout << "FAILURE in reading " << input << " **************************"
-         << endl;
-    throw NC_ERR;
-  }
-}
-
-/* read-in time-constant data fields without a time dimension */
-void io_muphys::input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
-                             const string &input, size_t ncells, size_t nlev) {
-  NcVar var;
-  v = new real_t[ncells * nlev]();
-  /*  access the input variable */
-  try {
-    var = datafile.getVar(input);
-  } catch (NcNotVar &e) {
-    cout << "FAILURE in accessing " << input << " (no time dimension) *******"
-         << endl;
-    e.what();
-    e.errorCode();
-  }
-  /*  read-in input field values */
-  try {
-    array_1d_t<size_t> startp = {0, 0};
-    array_1d_t<size_t> count = {nlev, ncells};
-    var.getVar(startp, count, v);
-  } catch (NcNotVar &e) {
-    cout << "FAILURE in reading values from " << input
-         << " (no time dimensions) *******" << endl;
-    e.what();
-    e.errorCode();
-  }
-}
-
-void io_muphys::input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
+  v.resize(ncells * nlev);
+#else
+void io_muphys::input_vector(NcFile &datafile, std::unique_ptr<real_t[]> &v,
                              const string &input, size_t ncells, size_t nlev,
                              size_t itime) {
+  v.reset(new real_t[ncells * nlev]());
+#endif
+
   NcVar att = datafile.getVar(input);
-  v = new real_t[ncells * nlev]();
   try {
+
     if (att.isNull()) {
       throw NC_ERR;
     }
-    array_1d_t<size_t> startp = {itime, 0, 0};
-    array_1d_t<size_t> count = {1, nlev, ncells};
-    att.getVar(startp, count, v);
+#if defined(MU_ENABLE_SEQ)
+    att.getVar({itime, 0, 0}, {1, nlev, ncells}, v.data());
+#else
+    att.getVar({itime, 0, 0}, {1, nlev, ncells}, v.get());
+#endif
   } catch (NcException &e) {
     e.what();
     cout << "FAILURE in reading " << input << " **************************"
@@ -139,22 +113,34 @@ void io_muphys::input_vector(NcFile &datafile, buffer_1d_t<real_t> &v,
   }
 }
 
+#if defined(MU_ENABLE_SEQ)
 void io_muphys::output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
                               const string output, array_1d_t<real_t> &v,
                               size_t &ncells, size_t &nlev,
                               int &deflate_level) {
+#else
+void io_muphys::output_vector(NcFile &datafile, std::vector<NcDim> &dims,
+                              const string &output, real_t *v, size_t ncells,
+                              size_t nlev, int deflate_level) {
+#endif
   // fortran:column major while c++ is row major
   NCreal_t ncreal_t;
   netCDF::NcVar var = datafile.addVar(output, ncreal_t, dims);
 
+#if defined(MU_ENABLE_SEQ)
   for (size_t i = 0; i < nlev; ++i) {
     var.putVar({i, 0}, {1, ncells}, &v[i * ncells]);
   }
+#else
+  var.putVar({0, 0}, {nlev, ncells}, {1, 1},
+             {static_cast<ptrdiff_t>(ncells), 1}, v);
+#endif
   if (deflate_level > 0) {
     var.setCompression(true, false, deflate_level);
   }
 }
 
+#if defined(MU_ENABLE_SEQ)
 void io_muphys::output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
                               const string output,
                               std::map<std::string, NcVarAtt> varAttributes,
@@ -182,22 +168,9 @@ void io_muphys::output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
                attribute.getAttLength(), dataValues.c_str());
   }
 }
+#endif
 
-void io_muphys::output_vector(NcFile &datafile, array_1d_t<NcDim> &dims,
-                              const string &output, buffer_1d_t<real_t> v,
-                              size_t ncells, size_t nlev, int deflate_level) {
-  // fortran:column major while c++ is row major
-  NCreal_t ncreal_t;
-  netCDF::NcVar var = datafile.addVar(output, ncreal_t, dims);
-
-  var.putVar({0, 0}, {nlev, ncells}, {1, 1},
-             {static_cast<ptrdiff_t>(ncells), 1}, v);
-
-  if (deflate_level > 0) {
-    var.setCompression(true, false, deflate_level);
-  }
-}
-
+#if defined(MU_ENABLE_SEQ)
 void io_muphys::read_fields(const string input_file, size_t &itime,
                             size_t &ncells, size_t &nlev, array_1d_t<real_t> &z,
                             array_1d_t<real_t> &t, array_1d_t<real_t> &p,
@@ -205,7 +178,15 @@ void io_muphys::read_fields(const string input_file, size_t &itime,
                             array_1d_t<real_t> &qc, array_1d_t<real_t> &qi,
                             array_1d_t<real_t> &qr, array_1d_t<real_t> &qs,
                             array_1d_t<real_t> &qg) {
-
+#else
+void io_muphys::read_fields(
+    const std::string &input_file, size_t &itime, size_t &ncells, size_t &nlev,
+    std::unique_ptr<real_t[]> &z, std::unique_ptr<real_t[]> &t,
+    std::unique_ptr<real_t[]> &p, std::unique_ptr<real_t[]> &rho,
+    std::unique_ptr<real_t[]> &qv, std::unique_ptr<real_t[]> &qc,
+    std::unique_ptr<real_t[]> &qi, std::unique_ptr<real_t[]> &qr,
+    std::unique_ptr<real_t[]> &qs, std::unique_ptr<real_t[]> &qg) {
+#endif
   NcFile datafile(input_file, NcFile::read);
 
   /*  read in the dimensions from the base variable: zg
@@ -231,77 +212,21 @@ void io_muphys::read_fields(const string input_file, size_t &itime,
   datafile.close();
 }
 
-void io_muphys::read_fields(const std::string &input_file, size_t &itime,
-                            size_t &ncells, size_t &nlev,
-                            buffer_1d_t<real_t> &z, buffer_1d_t<real_t> &t,
-                            buffer_1d_t<real_t> &p, buffer_1d_t<real_t> &rho,
-                            buffer_1d_t<real_t> &qv, buffer_1d_t<real_t> &qc,
-                            buffer_1d_t<real_t> &qi, buffer_1d_t<real_t> &qr,
-                            buffer_1d_t<real_t> &qs, buffer_1d_t<real_t> &qg) {
-
-  NcFile datafile(input_file, NcFile::read);
-
-  /*  read in the dimensions from the base variable: zg
-   *  1st) vertical
-   *  2nd) horizontal
-   */
-  auto baseDims = datafile.getVar(BASE_VAR).getDims();
-  nlev = baseDims[0].getSize();
-  ncells = baseDims[1].getSize();
-
-  io_muphys::input_vector(datafile, z, "zg", ncells, nlev);
-  io_muphys::input_vector(datafile, t, "ta", ncells, nlev, itime);
-
-  io_muphys::input_vector(datafile, p, "pfull", ncells, nlev, itime);
-  io_muphys::input_vector(datafile, rho, "rho", ncells, nlev, itime);
-  io_muphys::input_vector(datafile, qv, "hus", ncells, nlev, itime);
-  io_muphys::input_vector(datafile, qc, "clw", ncells, nlev, itime);
-  io_muphys::input_vector(datafile, qi, "cli", ncells, nlev, itime);
-  io_muphys::input_vector(datafile, qr, "qr", ncells, nlev, itime);
-  io_muphys::input_vector(datafile, qs, "qs", ncells, nlev, itime);
-  io_muphys::input_vector(datafile, qg, "qg", ncells, nlev, itime);
-
-  datafile.close();
-}
-
+#if defined(MU_ENABLE_SEQ)
 void io_muphys::write_fields(string output_file, size_t &ncells, size_t &nlev,
                              array_1d_t<real_t> &t, array_1d_t<real_t> &qv,
                              array_1d_t<real_t> &qc, array_1d_t<real_t> &qi,
                              array_1d_t<real_t> &qr, array_1d_t<real_t> &qs,
                              array_1d_t<real_t> &qg) {
-  NcFile datafile(output_file, NcFile::replace);
-  NcDim ncells_dim = datafile.addDim("ncells", ncells);
-  NcDim nlev_dim = datafile.addDim("height", nlev);
-  array_1d_t<NcDim> dims = {nlev_dim, ncells_dim};
-  int deflate_level = 0;
-
-  io_muphys::output_vector(datafile, dims, "ta", t, ncells, nlev,
-                           deflate_level);
-  io_muphys::output_vector(datafile, dims, "hus", qv, ncells, nlev,
-                           deflate_level);
-  io_muphys::output_vector(datafile, dims, "clw", qc, ncells, nlev,
-                           deflate_level);
-  io_muphys::output_vector(datafile, dims, "cli", qi, ncells, nlev,
-                           deflate_level);
-  io_muphys::output_vector(datafile, dims, "qr", qr, ncells, nlev,
-                           deflate_level);
-  io_muphys::output_vector(datafile, dims, "qs", qs, ncells, nlev,
-                           deflate_level);
-  io_muphys::output_vector(datafile, dims, "qg", qg, ncells, nlev,
-                           deflate_level);
-
-  datafile.close();
-}
-
+#else
 void io_muphys::write_fields(const string &output_file, size_t ncells,
-                             size_t nlev, buffer_1d_t<real_t> t,
-                             buffer_1d_t<real_t> qv, buffer_1d_t<real_t> qc,
-                             buffer_1d_t<real_t> qi, buffer_1d_t<real_t> qr,
-                             buffer_1d_t<real_t> qs, buffer_1d_t<real_t> qg) {
+                             size_t nlev, real_t *t, real_t *qv, real_t *qc,
+                             real_t *qi, real_t *qr, real_t *qs, real_t *qg) {
+#endif
   NcFile datafile(output_file, NcFile::replace);
   NcDim ncells_dim = datafile.addDim("ncells", ncells);
   NcDim nlev_dim = datafile.addDim("height", nlev);
-  array_1d_t<NcDim> dims = {nlev_dim, ncells_dim};
+  std::vector<NcDim> dims = {nlev_dim, ncells_dim};
   int deflate_level = 0;
 
   io_muphys::output_vector(datafile, dims, "ta", t, ncells, nlev,
@@ -322,47 +247,7 @@ void io_muphys::write_fields(const string &output_file, size_t ncells,
   datafile.close();
 }
 
-static void copy_coordinate_variables(NcFile &datafile, NcFile &inputfile,
-                                      array_1d_t<std::string> coordinates) {
-  for (auto &coordinate_name : coordinates) {
-    auto coordinate = inputfile.getVar(coordinate_name);
-    /* copy possible new dimensions from input coordinates to the output
-     * befor adding the related data variables */
-    for (NcDim &dim : coordinate.getDims()) {
-      auto currentDims = datafile.getDims();
-      /* map.contains() would be better, but requires c++20 */
-      if (auto search = currentDims.find(dim.getName());
-          search == currentDims.end())
-        datafile.addDim(dim.getName(), dim.getSize());
-    }
-    auto var = datafile.addVar(coordinate.getName(), coordinate.getType(),
-                               coordinate.getDims());
-
-    for (auto &[attribute_name, attribute] : coordinate.getAtts()) {
-      std::string dataValues = "default";
-      attribute.getValues(dataValues);
-      var.putAtt(attribute.getName(), attribute.getType(),
-                 attribute.getAttLength(), dataValues.c_str());
-    }
-
-    /* Calculate the total size of the varibale */
-    auto dimensions = coordinate.getDims();
-    struct Prod {
-      void operator()(NcDim n) { prod *= n.getSize(); }
-      size_t prod{1};
-    };
-    size_t totalSize =
-        std::for_each(dimensions.cbegin(), dimensions.cend(), Prod()).prod;
-
-    /* Create a one-dimensional vector to store its values */
-    array_1d_t<real_t> oneDimensionalVariable(totalSize);
-
-    /* Copy the original values to the output */
-    coordinate.getVar(oneDimensionalVariable.data());
-    var.putVar(oneDimensionalVariable.data());
-  }
-}
-
+#if defined(MU_ENABLE_SEQ)
 void io_muphys::write_fields(string output_file, string input_file,
                              size_t &ncells, size_t &nlev,
                              array_1d_t<real_t> &t, array_1d_t<real_t> &qv,
@@ -409,6 +294,48 @@ void io_muphys::write_fields(string output_file, string input_file,
 
   inputfile.close();
   datafile.close();
+}
+#endif
+
+static void copy_coordinate_variables(NcFile &datafile, NcFile &inputfile,
+                                      std::vector<std::string> coordinates) {
+  for (auto &coordinate_name : coordinates) {
+    auto coordinate = inputfile.getVar(coordinate_name);
+    /* copy possible new dimensions from input coordinates to the output
+     * befor adding the related data variables */
+    for (NcDim &dim : coordinate.getDims()) {
+      auto currentDims = datafile.getDims();
+      /* map.contains() would be better, but requires c++20 */
+      if (auto search = currentDims.find(dim.getName());
+          search == currentDims.end())
+        datafile.addDim(dim.getName(), dim.getSize());
+    }
+    auto var = datafile.addVar(coordinate.getName(), coordinate.getType(),
+                               coordinate.getDims());
+
+    for (auto &[attribute_name, attribute] : coordinate.getAtts()) {
+      std::string dataValues = "default";
+      attribute.getValues(dataValues);
+      var.putAtt(attribute.getName(), attribute.getType(),
+                 attribute.getAttLength(), dataValues.c_str());
+    }
+
+    /* Calculate the total size of the varibale */
+    auto dimensions = coordinate.getDims();
+    struct Prod {
+      void operator()(NcDim n) { prod *= n.getSize(); }
+      size_t prod{1};
+    };
+    size_t totalSize =
+        std::for_each(dimensions.cbegin(), dimensions.cend(), Prod()).prod;
+
+    /* Create a one-dimensional vector to store its values */
+    std::vector<real_t> oneDimensionalVariable(totalSize);
+
+    /* Copy the original values to the output */
+    coordinate.getVar(oneDimensionalVariable.data());
+    var.putVar(oneDimensionalVariable.data());
+  }
 }
 
 void io_muphys::log_time(int64_t value) {

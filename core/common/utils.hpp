@@ -14,9 +14,12 @@
 
 namespace utils_muphys {
 
+#if defined(MU_ENABLE_SEQ)
 void calc_dz(array_1d_t<real_t> &z, array_1d_t<real_t> &dz, size_t &ncells,
              size_t &nlev);
-void calc_dz(buffer_1d_t<real_t> z, buffer_1d_t<real_t> &dz, size_t ncells,
+#else
+void calc_dz(real_t *z, std::unique_ptr<real_t[]> &dz, size_t ncells,
              size_t nlev);
+#endif
 
 } // namespace utils_muphys

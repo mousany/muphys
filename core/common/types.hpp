@@ -11,6 +11,7 @@
 //
 #pragma once
 #include <exception>
+#include <memory>
 #include <string>
 #include <vector>
 using namespace std;
@@ -37,13 +38,12 @@ template <class T> T type_converter(char *str_ptr, char **end) {
     static_assert(not is_same_v<T, T>, "Invalid template type");
 }
 
+#if defined(MU_ENABLE_SEQ)
 template <typename T> using array_1d_t = std::vector<T, allocator<T>>;
 
 template <typename T>
 using array_2d_t = std::vector<std::vector<T, allocator<T>>>;
-
-template <typename T> using buffer_1d_t = T *;
-template <typename T> using buffer_2d_t = T *;
+#endif
 
 #ifdef MU_DEVICE
 #define TARGET __host__ __device__
