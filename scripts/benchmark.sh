@@ -12,7 +12,7 @@ BUILD_PREFIX=build_benchmark
 mkdir -p $BUILD_PREFIX
 
 cmake  -DCMAKE_CXX_COMPILER=g++ \
-       -DCMAKE_CXX_FLAGS="-O3" \
+       -DCMAKE_CXX_FLAGS="-Ofast" \
        -DMU_IMPL=$MU_IMPL \
        -DMU_ENABLE_SINGLE=ON \
        -B $BUILD_PREFIX/build_single
