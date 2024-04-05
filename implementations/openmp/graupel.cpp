@@ -166,9 +166,9 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
            (qv[oned_vec_index] >
             qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index])))) {
 
-        bool is_sig_present = std::max({qs[oned_vec_index], qi[oned_vec_index],
-                                        qg[oned_vec_index]}) >
-                              qmin; // is snow, ice or graupel present?
+        bool is_sig_present =
+            qs[oned_vec_index] > qmin or qi[oned_vec_index] > qmin or
+            qg[oned_vec_index] > qmin; // is snow, ice or graupel present?
 
         {
           memset(sx2x.get(), 0, nx * nx * sizeof(real_t));
