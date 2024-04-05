@@ -25,15 +25,14 @@ void utils_muphys::calc_dz(real_t *z, std::unique_ptr<real_t[]> &dz,
 #if defined(MU_ENABLE_SEQ)
   std::vector<std::vector<real_t>> zh(nlev + 1, std::vector<real_t>(ncells));
 #else
-  size_t nlev_plus_one = nlev + 1;
-  std::unique_ptr<real_t[]> zh(new real_t[nlev_plus_one * ncells]());
+  std::unique_ptr<real_t[]> zh(new real_t[(nlev + 1) * ncells]());
 #endif
 
   for (size_t i = 0; i < ncells; i++) {
 #if defined(MU_ENABLE_SEQ)
     zh[nlev][i]
 #else
-    zh[nlev + i * nlev_plus_one]
+    zh[(nlev)*ncells + i]
 #endif
         = (static_cast<real_t>(3.0) * z[i + (nlev - 1) * (ncells)] -
            z[i + (nlev - 2) * (ncells)]) *
@@ -43,25 +42,16 @@ void utils_muphys::calc_dz(real_t *z, std::unique_ptr<real_t[]> &dz,
   // The loop is intentionally i<nlev; since we are using an unsigned integer
   // data type, when i reaches 0, and you try to decrement further, (to -1), it
   // wraps to the maximum value representable by size_t.
-
-#if defined(MU_ENABLE_SEQ)
   for (size_t i = nlev - 1; i < nlev; --i) {
     for (size_t j = 0; j < ncells; j++) {
-
+#if defined(MU_ENABLE_SEQ)
       zh[i][j] = static_cast<real_t>(2.0) * z[j + (i * ncells)] - zh[i + 1][j];
       dz[i * ncells + j] = -zh[i + 1][j] + zh[i][j];
-    }
-  }
 #else
-#pragma omp parallel for
-  for (size_t j = 0; j < ncells; j++) {
-    for (size_t i = nlev - 1; i < nlev; --i) {
-      zh[i + j * nlev_plus_one] =
-          static_cast<real_t>(2.0) * z[j + (i * ncells)] -
-          zh[(i + 1) + j * nlev_plus_one];
-      dz[i * ncells + j] =
-          -zh[(i + 1) + j * nlev_plus_one] + zh[i + j * nlev_plus_one];
+      zh[i * ncells + j] = static_cast<real_t>(2.0) * z[j + (i * ncells)] -
+                           zh[(i + 1) * ncells + j];
+      dz[i * ncells + j] = -zh[(i + 1) * ncells + j] + zh[i * ncells + j];
+#endif
     }
   }
-#endif
 }
