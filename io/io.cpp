@@ -54,7 +54,7 @@ void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
 /* read-in time-constant data fields without a time dimension */
 void io_muphys::input_vector(NcFile &datafile, std::unique_ptr<real_t[]> &v,
                              const string &input, size_t ncells, size_t nlev) {
-  v.reset(new real_t[ncells * nlev]());
+  v.reset(new real_t[ncells * nlev]);
 #endif
 
   NcVar var;
@@ -91,7 +91,7 @@ void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
 void io_muphys::input_vector(NcFile &datafile, std::unique_ptr<real_t[]> &v,
                              const string &input, size_t ncells, size_t nlev,
                              size_t itime) {
-  v.reset(new real_t[ncells * nlev]());
+  v.reset(new real_t[ncells * nlev]);
 #endif
 
   NcVar att = datafile.getVar(input);

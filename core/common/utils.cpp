@@ -19,13 +19,13 @@ void utils_muphys::calc_dz(array_1d_t<real_t> &z, array_1d_t<real_t> &dz,
 #else
 void utils_muphys::calc_dz(real_t *z, std::unique_ptr<real_t[]> &dz,
                            size_t ncells, size_t nlev) {
-  dz.reset(new real_t[ncells * nlev]());
+  dz.reset(new real_t[ncells * nlev]);
 #endif
 
 #if defined(MU_ENABLE_SEQ)
   std::vector<std::vector<real_t>> zh(nlev + 1, std::vector<real_t>(ncells));
 #else
-  std::unique_ptr<real_t[]> zh(new real_t[(nlev + 1) * ncells]());
+  std::unique_ptr<real_t[]> zh(new real_t[(nlev + 1) * ncells]);
 #endif
 
   for (size_t i = 0; i < ncells; i++) {
