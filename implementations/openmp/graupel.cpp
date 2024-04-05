@@ -86,7 +86,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   // std::cout << "sequential graupel" << std::endl;
 
   std::unique_ptr<size_t[]> kmin{
-      new size_t[nvec * np]()}; // first level with condensate
+      new size_t[nvec * np]}; // first level with condensate
+  memset(kmin.get(), -1, nvec * np * sizeof(size_t));
 
   // nvec = ncells
   // ivbeg = 0, ivend = ncells
@@ -127,44 +128,28 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 #pragma omp parallel for
   for (size_t blk = ivstart; blk < ivend; blk += BLOCK_SIZE) {
     size_t blk_end = std::min(ivend, blk + BLOCK_SIZE);
-    std::unique_ptr<real_t[]> sx2x{new real_t[nx * nx]()}; // conversion rates
+    std::unique_ptr<real_t[]> sx2x{new real_t[nx * nx]}; // conversion rates
     for (size_t i = ke - 1; i < ke; --i) {
       for (size_t j = blk; j < blk_end; j++) {
         size_t oned_vec_index = i * ivend + j;
 
         // qp_ind = {0, 1, 2, 3}
         // ix = 0, qp_ind[0] = 0
-        if (i == (ke - 1)) {
-          kmin[j * np] = ke + 1;
-        }
-
         if (qr[oned_vec_index] > qmin) {
           kmin[j * np] = i;
         }
 
         // ix = 1, qp_ind[1] = 1
-        if (i == (ke - 1)) {
-          kmin[j * np + 1] = ke + 1;
-        }
-
         if (qi[oned_vec_index] > qmin) {
           kmin[j * np + 1] = i;
         }
 
         // ix = 2, qp_ind[2] = 2
-        if (i == (ke - 1)) {
-          kmin[j * np + 2] = ke + 1;
-        }
-
         if (qs[oned_vec_index] > qmin) {
           kmin[j * np + 2] = i;
         }
 
         // ix = 3, qp_ind[3] = 3
-        if (i == (ke - 1)) {
-          kmin[j * np + 3] = ke + 1;
-        }
-
         if (qg[oned_vec_index] > qmin) {
           kmin[j * np + 3] = i;
         }
