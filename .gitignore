@@ -54,3 +54,4 @@ reference_results/*.nc
 reference_results/*.zip
 
 .vscode/
+run/
