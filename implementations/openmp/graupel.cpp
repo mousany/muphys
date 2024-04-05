@@ -159,8 +159,9 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         kmin[j * np + 3] = i;
       }
 
-      if ((std::max({qc[oned_vec_index], qr[oned_vec_index], qs[oned_vec_index],
-                     qi[oned_vec_index], qg[oned_vec_index]}) > qmin) or
+      if ((qc[oned_vec_index] > qmin or qr[oned_vec_index] > qmin or
+           qs[oned_vec_index] > qmin or qi[oned_vec_index] > qmin or
+           qg[oned_vec_index] > qmin) or
           ((t[oned_vec_index] < tfrz_het2) and
            (qv[oned_vec_index] >
             qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index])))) {
@@ -475,8 +476,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
       }
 
       size_t kp1 = std::min(ke - 1, k + 1);
-      if (k >=
-          *std::min_element(kmin.get() + iv * np, kmin.get() + iv * np + np)) {
+      if (k >= kmin[iv * np] or k >= kmin[iv * np + 1] or
+          k >= kmin[iv * np + 2] or k >= kmin[iv * np + 3]) {
         real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
         real_t qice =
             qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
