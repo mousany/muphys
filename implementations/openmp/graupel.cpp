@@ -60,6 +60,24 @@ void precip(const real_t (&params)[3], real_t &precip_0, real_t &precip_1,
   precip_2 = vc * fall_speed(rho_x, params); // vt
 }
 
+// data[r, c, k]
+// r: R, c: C from input, k: K constant
+// r linear increase, c any
+
+// Loop 1: iterate r, c
+//  1. for each c, find the smallest r (as r*) that satisfies condition P1
+//      P1: data[r, c, k] > Constant
+//  2. find all r, c, that satisfies P1 and P2
+//      P2: dynamically calculated from data[r, c, k]
+
+// Loop 2: for all r, c found in Loop 1
+//  1. transform data[r, c, k] by F
+//      F only depends on data[r, c, k]
+
+// Loop 3: iterate r, c
+//  1. for each c, where r >= r*, update data[r, c, k] by G
+//      G depends on an internal state from r-1, c
+
 void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              size_t kstart, real_t dt, real_t *dz, real_t *t, real_t *rho,
              real_t *p, real_t *qv, real_t *qc, real_t *qi, real_t *qr,
@@ -69,10 +87,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
   std::unique_ptr<size_t[]> kmin{
       new size_t[nvec * np]()}; // first level with condensate
-
-  std::unique_ptr<real_t[]> vt{
-      new real_t[nvec * np]()}; // terminal velocity for different hydrometeor
-                                // categories
 
   // nvec = ncells
   // ivbeg = 0, ivend = ncells
@@ -122,8 +136,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         // ix = 0, qp_ind[0] = 0
         if (i == (ke - 1)) {
           kmin[j * np] = ke + 1;
-          vt[j * np] = 0.0;
-          prr_gsp[j] = 0.0;
         }
 
         if (qr[oned_vec_index] > qmin) {
@@ -133,8 +145,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         // ix = 1, qp_ind[1] = 1
         if (i == (ke - 1)) {
           kmin[j * np + 1] = ke + 1;
-          vt[j * np + 1] = 0.0;
-          pri_gsp[j] = 0.0;
         }
 
         if (qi[oned_vec_index] > qmin) {
@@ -144,8 +154,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         // ix = 2, qp_ind[2] = 2
         if (i == (ke - 1)) {
           kmin[j * np + 2] = ke + 1;
-          vt[j * np + 2] = 0.0;
-          prs_gsp[j] = 0.0;
         }
 
         if (qs[oned_vec_index] > qmin) {
@@ -155,8 +163,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         // ix = 3, qp_ind[3] = 3
         if (i == (ke - 1)) {
           kmin[j * np + 3] = ke + 1;
-          vt[j * np + 3] = 0.0;
-          prg_gsp[j] = 0.0;
         }
 
         if (qg[oned_vec_index] > qmin) {
@@ -479,12 +485,13 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
     std::unique_ptr<real_t[]> eflx{
         new real_t[blk_end -
                    blk]()}; // internal energy flux from precipitation (W/m2 )
+
+    std::unique_ptr<real_t[]> vt{
+        new real_t[(blk_end - blk) * np]()}; // terminal velocity for different
+                                             // hydrometeor categories
     for (size_t k = kstart; k < k_end; k++) {
       for (size_t iv = blk; iv < blk_end; iv++) {
         size_t oned_vec_index = k * ivend + iv;
-        if (k == kstart) {
-          eflx[iv - blk] = 0.0;
-        }
 
         size_t kp1 = std::min(ke - 1, k + 1);
         if (k >= kmin[iv * np] or k >= kmin[iv * np + 1] or
@@ -508,8 +515,9 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if (k >= kmin[iv * np]) {
             real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qr[oned_vec_index]);
-            precip(params[0], qr[oned_vec_index], prr_gsp[iv], vt[iv * np],
-                   zeta, vc, prr_gsp[iv], vt[iv * np], qr[oned_vec_index],
+            precip(params[0], qr[oned_vec_index], prr_gsp[iv],
+                   vt[(iv - blk) * np], zeta, vc, prr_gsp[iv],
+                   vt[(iv - blk) * np], qr[oned_vec_index],
                    qr[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
@@ -517,8 +525,9 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if (k >= kmin[iv * np + 1]) {
             real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qi[oned_vec_index]);
-            precip(params[1], qi[oned_vec_index], pri_gsp[iv], vt[iv * np + 1],
-                   zeta, vc, pri_gsp[iv], vt[iv * np + 1], qi[oned_vec_index],
+            precip(params[1], qi[oned_vec_index], pri_gsp[iv],
+                   vt[(iv - blk) * np + 1], zeta, vc, pri_gsp[iv],
+                   vt[(iv - blk) * np + 1], qi[oned_vec_index],
                    qi[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
@@ -526,8 +535,9 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if (k >= kmin[iv * np + 2]) {
             real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qs[oned_vec_index]);
-            precip(params[2], qs[oned_vec_index], prs_gsp[iv], vt[iv * np + 2],
-                   zeta, vc, prs_gsp[iv], vt[iv * np + 2], qs[oned_vec_index],
+            precip(params[2], qs[oned_vec_index], prs_gsp[iv],
+                   vt[(iv - blk) * np + 2], zeta, vc, prs_gsp[iv],
+                   vt[(iv - blk) * np + 2], qs[oned_vec_index],
                    qs[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
@@ -535,8 +545,9 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if (k >= kmin[iv * np + 3]) {
             real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qg[oned_vec_index]);
-            precip(params[3], qg[oned_vec_index], prg_gsp[iv], vt[iv * np + 3],
-                   zeta, vc, prg_gsp[iv], vt[iv * np + 3], qg[oned_vec_index],
+            precip(params[3], qg[oned_vec_index], prg_gsp[iv],
+                   vt[(iv - blk) * np + 3], zeta, vc, prg_gsp[iv],
+                   vt[(iv - blk) * np + 3], qg[oned_vec_index],
                    qg[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
