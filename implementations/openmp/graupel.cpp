@@ -78,6 +78,18 @@ void precip(const real_t (&params)[3], real_t &precip_0, real_t &precip_1,
 //  1. for each c, where r >= r*, update data[r, c, k] by G
 //      G depends on an internal state from r-1, c
 
+// What has been done
+// 1. Remove vector
+// 2. Merge Loop 1 and Loop 2
+// 3. Parallelize the remaining loops by column
+// 4. Cache blocking
+
+// Thoughts:
+// w/o large rewrite:
+//  1. ? Merge the remaining two loops
+//
+// w/ large rewrite:
+
 void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              size_t kstart, real_t dt, real_t *dz, real_t *t, real_t *rho,
              real_t *p, real_t *qv, real_t *qc, real_t *qi, real_t *qr,
