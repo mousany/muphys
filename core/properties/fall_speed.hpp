@@ -27,4 +27,9 @@ template <typename array_t>
 TARGET real_t fall_speed(real_t density, array_t params) {
   return params[0] * pow((density + params[2]), params[1]);
 }
+
+template <const size_t idx> TARGET real_t fall_speed(real_t density) {
+  return params[idx][0] * pow((density + params[idx][2]), params[idx][1]);
+}
+
 } // namespace property

@@ -35,7 +35,6 @@ using namespace graupel_ct;
  * @brief TODO
  *
  * @param precip time step for integration of microphysics  (s)
- * @param params fall speed parameters
  * @param zeta dt/(2dz)
  * @param vc state dependent fall speed correction
  * @param flx flux into cell from above
@@ -44,20 +43,21 @@ using namespace graupel_ct;
  * @param q_kp1 specific mass in next lower cell
  * @param rho density
  */
-void precip(const real_t (&params)[3], real_t &precip_0, real_t &precip_1,
-            real_t &precip_2, real_t zeta, real_t vc, real_t flx, real_t vt,
-            real_t q, real_t q_kp1, real_t rho) {
+template <const size_t idx>
+void precip(real_t &precip_0, real_t &precip_1, real_t &precip_2, real_t zeta,
+            real_t vc, real_t flx, real_t vt, real_t q, real_t q_kp1,
+            real_t rho) {
   real_t rho_x, flx_eff, flx_partial;
   rho_x = q * rho;
   flx_eff = (rho_x / zeta) + static_cast<real_t>(2.0) * flx;
-  flx_partial = rho_x * vc * fall_speed(rho_x, params);
+  flx_partial = rho_x * vc * fall_speed<idx>(rho_x);
   flx_partial = std::fmin(flx_partial, flx_eff);
   precip_0 = (zeta * (flx_eff - flx_partial)) /
              ((static_cast<real_t>(1.0) + zeta * vt) * rho); // q update
   precip_1 =
       (precip_0 * rho * vt + flx_partial) * static_cast<real_t>(0.5); // flx
   rho_x = (precip_0 + q_kp1) * static_cast<real_t>(0.5) * rho;
-  precip_2 = vc * fall_speed(rho_x, params); // vt
+  precip_2 = vc * fall_speed<idx>(rho_x); // vt
 }
 
 // data[r, c, k]
@@ -77,18 +77,6 @@ void precip(const real_t (&params)[3], real_t &precip_0, real_t &precip_1,
 // Loop 3: iterate r, c
 //  1. for each c, where r >= r*, update data[r, c, k] by G
 //      G depends on an internal state from r-1, c
-
-// What has been done
-// 1. Remove vector
-// 2. Merge Loop 1 and Loop 2
-// 3. Parallelize the remaining loops by column
-// 4. Cache blocking
-
-// Thoughts:
-// w/o large rewrite:
-//  1. ? Merge the remaining two loops
-//
-// w/ large rewrite:
 
 void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              size_t kstart, real_t dt, real_t *dz, real_t *t, real_t *rho,
@@ -512,40 +500,40 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if (k >= kmin[iv * np]) {
             real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qr[oned_vec_index]);
-            precip(params[0], qr[oned_vec_index], prr_gsp[iv],
-                   vt[(iv - blk) * np], zeta, vc, prr_gsp[iv],
-                   vt[(iv - blk) * np], qr[oned_vec_index],
-                   qr[kp1 * ivend + iv], rho[oned_vec_index]);
+            precip<0>(qr[oned_vec_index], prr_gsp[iv], vt[(iv - blk) * np],
+                      zeta, vc, prr_gsp[iv], vt[(iv - blk) * np],
+                      qr[oned_vec_index], qr[kp1 * ivend + iv],
+                      rho[oned_vec_index]);
           }
 
           // ix = 1, qp_ind[1] = 1
           if (k >= kmin[iv * np + 1]) {
             real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qi[oned_vec_index]);
-            precip(params[1], qi[oned_vec_index], pri_gsp[iv],
-                   vt[(iv - blk) * np + 1], zeta, vc, pri_gsp[iv],
-                   vt[(iv - blk) * np + 1], qi[oned_vec_index],
-                   qi[kp1 * ivend + iv], rho[oned_vec_index]);
+            precip<1>(qi[oned_vec_index], pri_gsp[iv], vt[(iv - blk) * np + 1],
+                      zeta, vc, pri_gsp[iv], vt[(iv - blk) * np + 1],
+                      qi[oned_vec_index], qi[kp1 * ivend + iv],
+                      rho[oned_vec_index]);
           }
 
           // ix = 2, qp_ind[2] = 2
           if (k >= kmin[iv * np + 2]) {
             real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qs[oned_vec_index]);
-            precip(params[2], qs[oned_vec_index], prs_gsp[iv],
-                   vt[(iv - blk) * np + 2], zeta, vc, prs_gsp[iv],
-                   vt[(iv - blk) * np + 2], qs[oned_vec_index],
-                   qs[kp1 * ivend + iv], rho[oned_vec_index]);
+            precip<2>(qs[oned_vec_index], prs_gsp[iv], vt[(iv - blk) * np + 2],
+                      zeta, vc, prs_gsp[iv], vt[(iv - blk) * np + 2],
+                      qs[oned_vec_index], qs[kp1 * ivend + iv],
+                      rho[oned_vec_index]);
           }
 
           // ix = 3, qp_ind[3] = 3
           if (k >= kmin[iv * np + 3]) {
             real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qg[oned_vec_index]);
-            precip(params[3], qg[oned_vec_index], prg_gsp[iv],
-                   vt[(iv - blk) * np + 3], zeta, vc, prg_gsp[iv],
-                   vt[(iv - blk) * np + 3], qg[oned_vec_index],
-                   qg[kp1 * ivend + iv], rho[oned_vec_index]);
+            precip<3>(qg[oned_vec_index], prg_gsp[iv], vt[(iv - blk) * np + 3],
+                      zeta, vc, prg_gsp[iv], vt[(iv - blk) * np + 3],
+                      qg[oned_vec_index], qg[kp1 * ivend + iv],
+                      rho[oned_vec_index]);
           }
 
           pflx[oned_vec_index] = prs_gsp[iv] + pri_gsp[iv] + prg_gsp[iv];
