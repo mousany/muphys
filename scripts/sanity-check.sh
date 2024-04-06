@@ -6,12 +6,19 @@ else
   MU_IMPL=$1
 fi
 
+# if MU_IMPL is gpu, use nvc++
+if [ $MU_IMPL == "gpu" ]; then
+  BUILD_CXX_COMPILER=nvc++
+else
+  BUILD_CXX_COMPILER=g++
+fi
+
 BUILD_PREFIX=build_sanity
 
 # rm -rf $BUILD_PREFIX 
 mkdir -p $BUILD_PREFIX
 
-cmake  -DCMAKE_CXX_COMPILER=g++ \
+cmake  -DCMAKE_CXX_COMPILER=$BUILD_CXX_COMPILER \
        -DCMAKE_CXX_FLAGS="-O0" \
        -DMU_IMPL=$MU_IMPL \
        -DMU_ENABLE_SINGLE=ON \
@@ -29,7 +36,7 @@ $BUILD_PREFIX/build_single/bin/graupel tasks/20k.nc
 cdo diffn output.nc reference_results/sequential_single_20k.nc
 
 
-# cmake  -DCMAKE_CXX_COMPILER=g++ \
+# cmake  -DCMAKE_CXX_COMPILER=$BUILD_CXX_COMPILER \
 #        -DCMAKE_CXX_FLAGS="-O0" \
 #        -DMU_IMPL=$MU_IMPL \
 #        -DMU_ENABLE_SINGLE=OFF \
