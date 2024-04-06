@@ -1,5 +1,5 @@
 if(NOT MU_IMPL)
-    message(FATAL_ERROR "No implementation was selected. Options are: seq, omp")
+    message(FATAL_ERROR "No implementation was selected. Options are: seq, omp, gpu")
 # add compile definitions and external dependecies based on options
 elseif ("${MU_IMPL}" STREQUAL "seq")
     add_subdirectory(implementations/sequential)

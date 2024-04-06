@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 function diffn-gpu {
   threshold=1e-11
 
@@ -7,7 +9,7 @@ function diffn-gpu {
       all_rows=all_rows $0 "\n"; # Store all rows
       if (NF < 10) next; # Skip non-data lines
 
-      min = $8; mean = $9; max = $10;
+      min = $8+0; mean = $9+0; max = $10+0; # Convert to numerical values
 
       if ((min < -thr || min > thr) || (mean < -thr || mean > thr) || (max < -thr || max > thr)) {
           count_differs++;
@@ -19,6 +21,7 @@ function diffn-gpu {
       if (count_differs > 0) {
           print all_rows;
           printf "%d out of %d records differ\n", count_differs, total;
+          exit 1;
       }
   }'
 }
@@ -53,20 +56,17 @@ cmake  -DCMAKE_CXX_COMPILER=$BUILD_CXX_COMPILER \
        -DCMAKE_CXX_FLAGS="-O0" \
        -DMU_IMPL=$MU_IMPL \
        -DMU_ENABLE_SINGLE=ON \
-       -B $BUILD_PREFIX/build_single && \
+       -B $BUILD_PREFIX/build_single
+
 cmake --build $BUILD_PREFIX/build_single
 
-if [ $? -ne 0 ]; then
-  exit 1
-fi
-
-$BUILD_PREFIX/build_single/bin/graupel tasks/dbg.nc && \
+$BUILD_PREFIX/build_single/bin/graupel tasks/dbg.nc
 check reference_results/dbg_single.nc
 
-$BUILD_PREFIX/build_single/bin/graupel tasks/input.nc && \
+$BUILD_PREFIX/build_single/bin/graupel tasks/input.nc
 check reference_results/sequential_single_output.nc
 
-$BUILD_PREFIX/build_single/bin/graupel tasks/20k.nc && \
+$BUILD_PREFIX/build_single/bin/graupel tasks/20k.nc
 check reference_results/sequential_single_20k.nc
 
 
@@ -74,18 +74,15 @@ check reference_results/sequential_single_20k.nc
 #        -DCMAKE_CXX_FLAGS="-O0" \
 #        -DMU_IMPL=$MU_IMPL \
 #        -DMU_ENABLE_SINGLE=OFF \
-#        -B $BUILD_PREFIX/build_double && \
+#        -B $BUILD_PREFIX/build_double
+       
 # cmake --build $BUILD_PREFIX/build_double
 
-# if [ $? -ne 0 ]; then
-#   exit 1
-# fi
-
-# $BUILD_PREFIX/build_double/bin/graupel tasks/dbg.nc && \
+# $BUILD_PREFIX/build_double/bin/graupel tasks/dbg.nc
 # check reference_results/dbg_double.nc
 
-# $BUILD_PREFIX/build_double/bin/graupel tasks/input.nc && \
+# $BUILD_PREFIX/build_double/bin/graupel tasks/input.nc
 # check reference_results/sequential_double_output.nc
 
-# $BUILD_PREFIX/build_double/bin/graupel tasks/20k.nc && \
+# $BUILD_PREFIX/build_double/bin/graupel tasks/20k.nc
 # check reference_results/sequential_double_20k.nc
