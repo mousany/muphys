@@ -28,7 +28,7 @@ TARGET real_t fall_speed(real_t density, array_t params) {
   return params[0] * pow((density + params[2]), params[1]);
 }
 
-#ifdef MU_ENABLE_OMP
+#ifndef MU_ENABLE_SEQ
 template <const size_t idx> TARGET real_t fall_speed(real_t density);
 
 template <> TARGET real_t fall_speed<0>(real_t density) {
