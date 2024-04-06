@@ -76,7 +76,7 @@ void precip(real_t &precip_0, real_t &precip_1, real_t &precip_2, real_t zeta,
 
 // Loop 3: iterate r, c
 //  1. for each c, where r >= r*, update data[r, c, k] by G
-//      G depends on an internal state from r-1, c
+//      G depends on an internal state from r-1, c and data[r+1, c, k]
 
 void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              size_t kstart, real_t dt, real_t *dz, real_t *t, real_t *rho,
