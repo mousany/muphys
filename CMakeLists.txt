@@ -10,7 +10,7 @@ option(MU_IMPL "Select implementation" "seq")
 
 option(MU_ENABLE_TESTS "Enable unit-tests" ON)
 
-option(MU_GPU_VERSION "Nvidia GPU Version" cc70)
+option(MU_GPU_VERSION "Nvidia GPU Version" "cc70")
 
 # includes
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
