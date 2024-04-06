@@ -10,6 +10,8 @@ option(MU_IMPL "Select implementation" "seq")
 
 option(MU_ENABLE_TESTS "Enable unit-tests" ON)
 
+option(MU_GPU_VERSION "Nvidia GPU Version" cc70)
+
 # includes
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
@@ -41,8 +43,8 @@ elseif ("${MU_IMPL}" STREQUAL "gpu")
     #set(CMAKE_C_COMPILER nvc)
     #set(CMAKE_CXX_COMPILER nvc++)
     if (NOT CLION)
-        add_compile_options(-mp=gpu -gpu=cc80)
-        add_link_options(-mp=gpu -gpu=cc80)
+        add_compile_options(-mp=gpu -gpu=${MU_GPU_VERSION})
+        add_link_options(-mp=gpu -gpu=${MU_GPU_VERSION})
         #target_sources(muphys_cpp PRIVATE "implementations/gpu/graupel.cpp")
     endif()
 else()
