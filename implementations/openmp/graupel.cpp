@@ -410,15 +410,13 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 #pragma omp parallel for
   for (size_t blk = ivstart; blk < ivend; blk += BLOCK_SIZE) {
     size_t blk_end = std::min(ivend, blk + BLOCK_SIZE);
-    std::unique_ptr<real_t[]> sx2x{new real_t[nx * nx]}; // conversion rates
-    std::unique_ptr<real_t[]> eflx{
-        new real_t[blk_end -
-                   blk]()}; // internal energy flux from precipitation (W/m2 )
-    std::unique_ptr<real_t[]> vt{
-        new real_t[(blk_end - blk) * np]()}; // terminal velocity for different
-                                             // hydrometeor categories
-    std::unique_ptr<bool[]> kmin_flag{
-        new bool[(blk_end - blk) * np]()}; // flag for kmin
+
+    real_t sx2x[nx * nx]; // conversion rates
+    real_t eflx[BLOCK_SIZE] = {
+        0}; // internal energy flux from precipitation (W/m2 )
+    real_t vt[BLOCK_SIZE * np] = {0};      // terminal velocity for different
+                                           // hydrometeor categories
+    bool kmin_flag[BLOCK_SIZE * np] = {0}; // flag for kmin
 
     for (size_t iv = blk; iv < blk_end; iv++) {
       bool qc_qmin = qc[iv] > qmin;
@@ -438,8 +436,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         bool is_sig_present =
             qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
 
-        solidify(iv, sx2x.get(), is_sig_present, dt, dz, t, rho, p, qv, qc, qi,
-                 qr, qs, qg, qnc);
+        solidify(iv, sx2x, is_sig_present, dt, dz, t, rho, p, qv, qc, qi, qr,
+                 qs, qg, qnc);
       }
     }
 
@@ -467,8 +465,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
             bool is_sig_present = qs_qmin or qi_qmin or
                                   qg_qmin; // is snow, ice or graupel present?
 
-            solidify(nexted_vec_index, sx2x.get(), is_sig_present, dt, dz, t,
-                     rho, p, qv, qc, qi, qr, qs, qg, qnc);
+            solidify(nexted_vec_index, sx2x, is_sig_present, dt, dz, t, rho, p,
+                     qv, qc, qi, qr, qs, qg, qnc);
           }
         }
 
