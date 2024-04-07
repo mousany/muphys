@@ -108,14 +108,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   // wraps to the maximum value representable by size_t.
 
   constexpr size_t BLOCK_SIZE = 64 / sizeof(real_t);
-  real_t x=0;
-#pragma omp target map(tofrom:x) map(to:qr[0:ke*ivend])
-  #pragma omp teams distribute parallel for simd
-  for(size_t i=0; i<ke*ivend; i++) {
-    x+=qr[i];
-  }
-  std::cerr<<"x="<<x<<std::endl;
-
 
 #pragma omp target teams distribute parallel for simd \
   map(tofrom: prr_gsp[0:ivend], pri_gsp[0:ivend], prs_gsp[0:ivend], prg_gsp[0:ivend]) \
@@ -488,9 +480,15 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   size_t k_end = (lrain) ? ke : kstart - 1;
 //#pragma omp parallel for
   //#pragma omp target teams distribute parallel for simd
+#pragma omp target teams distribute parallel for simd \
+  map(tofrom: prr_gsp[0:ivend], pri_gsp[0:ivend], prs_gsp[0:ivend], prg_gsp[0:ivend]) \
+  map(tofrom: qr[0:ivend*ke], qi[0:ivend*ke], qs[0:ivend*ke], qg[0:ivend*ke],qc[0:ivend*ke],qs[0:ivend*ke],qv[0:ivend*ke]) \
+  map(tofrom: t[0:ivend*ke], rho[0:ivend*ke], p[0:ivend*ke]) \
+  map(tofrom: kmin[0:nvec*np], vt[0:nvec*np]) \
+  map(tofrom: dz[0:ivend*ke], pflx[0:ivend*ke])
   for (size_t blk = ivstart; blk < ivend; blk += BLOCK_SIZE) {
     size_t blk_end = std::min(ivend, blk + BLOCK_SIZE);
-    real_t *eflx = new real_t[blk_end - blk]; // internal energy flux from precipitation (W/m2 )
+    real_t eflx[BLOCK_SIZE]; // internal energy flux from precipitation (W/m2 )
     for (size_t k = kstart; k < k_end; k++) {
       for (size_t iv = blk; iv < blk_end; iv++) {
         size_t oned_vec_index = k * ivend + iv;
