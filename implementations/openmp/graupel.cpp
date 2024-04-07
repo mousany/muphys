@@ -78,11 +78,12 @@ TARGET void precip(real_t &precip_0, real_t &precip_1, real_t &precip_2,
 //  1. for each c, where r >= r*, update data[r, c, k] by G
 //      G depends on an internal state from r-1, c and data[r+1, c, k]
 
-TARGET void solidify(size_t oned_vec_index, real_t *sx2x, bool is_sig_present,
-                     real_t dt, real_t *dz, real_t *t, real_t *rho, real_t *p,
-                     real_t *qv, real_t *qc, real_t *qi, real_t *qr, real_t *qs,
-                     real_t *qg, real_t qnc) {
-  memset(sx2x, 0, nx * nx * sizeof(real_t));
+TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
+                     real_t *dz, real_t *t, real_t *rho, real_t *p, real_t *qv,
+                     real_t *qc, real_t *qi, real_t *qr, real_t *qs, real_t *qg,
+                     real_t qnc) {
+
+  real_t sx2x[nx * nx] = {0.}; // conversion rates
 
   real_t dvsw =
       qv[oned_vec_index] - qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
@@ -183,170 +184,128 @@ TARGET void solidify(size_t oned_vec_index, real_t *sx2x, bool is_sig_present,
   // ix = 0, qx_ind[0] = 5
   sink[5] = 0.0;
   if ((is_sig_present) or (5 == lqc) or (5 == lqv) or (5 == lqr)) {
-
-    for (size_t i = 0; i < nx; i++) {
-      sink[5] = sink[5] + sx2x[5 * nx + i];
-    }
+    sink[5] = sx2x[5 * nx + 0] + sx2x[5 * nx + 1] + sx2x[5 * nx + 2] +
+              sx2x[5 * nx + 3] + sx2x[5 * nx + 4] + sx2x[5 * nx + 5];
     stot = qv[oned_vec_index] / dt;
-
     if ((sink[5] > stot) && (qv[oned_vec_index] > qmin)) {
-      real_t nextSink = 0.0;
-
+#pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[5 * nx + i] = sx2x[5 * nx + i] * stot / sink[5];
-        nextSink = nextSink + sx2x[5 * nx + i];
       }
-      sink[5] = nextSink;
+      sink[5] = sx2x[5 * nx + 0] + sx2x[5 * nx + 1] + sx2x[5 * nx + 2] +
+                sx2x[5 * nx + 3] + sx2x[5 * nx + 4] + sx2x[5 * nx + 5];
     }
   }
 
   // ix = 1, qx_ind[1] = 4
   sink[4] = 0.0;
   if ((is_sig_present) or (4 == lqc) or (4 == lqv) or (4 == lqr)) {
-
-    for (size_t i = 0; i < nx; i++) {
-      sink[4] = sink[4] + sx2x[4 * nx + i];
-    }
+    sink[4] = sx2x[4 * nx + 0] + sx2x[4 * nx + 1] + sx2x[4 * nx + 2] +
+              sx2x[4 * nx + 3] + sx2x[4 * nx + 4] + sx2x[4 * nx + 5];
     stot = qc[oned_vec_index] / dt;
-
     if ((sink[4] > stot) && (qc[oned_vec_index] > qmin)) {
-      real_t nextSink = 0.0;
-
+#pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[4 * nx + i] = sx2x[4 * nx + i] * stot / sink[4];
-        nextSink = nextSink + sx2x[4 * nx + i];
       }
-      sink[4] = nextSink;
+      sink[4] = sx2x[4 * nx + 0] + sx2x[4 * nx + 1] + sx2x[4 * nx + 2] +
+                sx2x[4 * nx + 3] + sx2x[4 * nx + 4] + sx2x[4 * nx + 5];
     }
   }
 
   // ix = 2, qx_ind[2] = 0
   sink[0] = 0.0;
   if ((is_sig_present) or (0 == lqc) or (0 == lqv) or (0 == lqr)) {
-
-    for (size_t i = 0; i < nx; i++) {
-      sink[0] = sink[0] + sx2x[0 * nx + i];
-    }
+    sink[0] = sx2x[0 * nx + 0] + sx2x[0 * nx + 1] + sx2x[0 * nx + 2] +
+              sx2x[0 * nx + 3] + sx2x[0 * nx + 4] + sx2x[0 * nx + 5];
     stot = qr[oned_vec_index] / dt;
-
     if ((sink[0] > stot) && (qr[oned_vec_index] > qmin)) {
-      real_t nextSink = 0.0;
-
+#pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[0 * nx + i] = sx2x[0 * nx + i] * stot / sink[0];
-        nextSink = nextSink + sx2x[0 * nx + i];
       }
-      sink[0] = nextSink;
+      sink[0] = sx2x[0 * nx + 0] + sx2x[0 * nx + 1] + sx2x[0 * nx + 2] +
+                sx2x[0 * nx + 3] + sx2x[0 * nx + 4] + sx2x[0 * nx + 5];
     }
   }
 
   // ix = 3, qx_ind[3] = 2
   sink[2] = 0.0;
   if ((is_sig_present) or (2 == lqc) or (2 == lqv) or (2 == lqr)) {
-
-    for (size_t i = 0; i < nx; i++) {
-      sink[2] = sink[2] + sx2x[2 * nx + i];
-    }
+    sink[2] = sx2x[2 * nx + 0] + sx2x[2 * nx + 1] + sx2x[2 * nx + 2] +
+              sx2x[2 * nx + 3] + sx2x[2 * nx + 4] + sx2x[2 * nx + 5];
     stot = qs[oned_vec_index] / dt;
-
     if ((sink[2] > stot) && (qs[oned_vec_index] > qmin)) {
-      real_t nextSink = 0.0;
-
+#pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[2 * nx + i] = sx2x[2 * nx + i] * stot / sink[2];
-        nextSink = nextSink + sx2x[2 * nx + i];
       }
-      sink[2] = nextSink;
+      sink[2] = sx2x[2 * nx + 0] + sx2x[2 * nx + 1] + sx2x[2 * nx + 2] +
+                sx2x[2 * nx + 3] + sx2x[2 * nx + 4] + sx2x[2 * nx + 5];
     }
   }
 
   // ix = 4, qx_ind[4] = 1
   sink[1] = 0.0;
   if ((is_sig_present) or (1 == lqc) or (1 == lqv) or (1 == lqr)) {
-
-    for (size_t i = 0; i < nx; i++) {
-      sink[1] = sink[1] + sx2x[1 * nx + i];
-    }
+    sink[1] = sx2x[1 * nx + 0] + sx2x[1 * nx + 1] + sx2x[1 * nx + 2] +
+              sx2x[1 * nx + 3] + sx2x[1 * nx + 4] + sx2x[1 * nx + 5];
     stot = qi[oned_vec_index] / dt;
-
     if ((sink[1] > stot) && (qi[oned_vec_index] > qmin)) {
-      real_t nextSink = 0.0;
-
+#pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[1 * nx + i] = sx2x[1 * nx + i] * stot / sink[1];
-        nextSink = nextSink + sx2x[1 * nx + i];
       }
-      sink[1] = nextSink;
+      sink[1] = sx2x[1 * nx + 0] + sx2x[1 * nx + 1] + sx2x[1 * nx + 2] +
+                sx2x[1 * nx + 3] + sx2x[1 * nx + 4] + sx2x[1 * nx + 5];
     }
   }
 
   // ix = 5, qx_ind[5] = 3
   sink[3] = 0.0;
   if ((is_sig_present) or (3 == lqc) or (3 == lqv) or (3 == lqr)) {
-
-    for (size_t i = 0; i < nx; i++) {
-      sink[3] = sink[3] + sx2x[3 * nx + i];
-    }
+    sink[3] = sx2x[3 * nx + 0] + sx2x[3 * nx + 1] + sx2x[3 * nx + 2] +
+              sx2x[3 * nx + 3] + sx2x[3 * nx + 4] + sx2x[3 * nx + 5];
     stot = qg[oned_vec_index] / dt;
-
     if ((sink[3] > stot) && (qg[oned_vec_index] > qmin)) {
-      real_t nextSink = 0.0;
-
+#pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[3 * nx + i] = sx2x[3 * nx + i] * stot / sink[3];
-        nextSink = nextSink + sx2x[3 * nx + i];
       }
-      sink[3] = nextSink;
+      sink[3] = sx2x[3 * nx + 0] + sx2x[3 * nx + 1] + sx2x[3 * nx + 2] +
+                sx2x[3 * nx + 3] + sx2x[3 * nx + 4] + sx2x[3 * nx + 5];
     }
   }
 
   // qx_ind = {5, 4, 0, 2, 1, 3}
   // ix = 0, qx_ind[0] = 5
-  real_t sx2x_sum = 0;
-  for (size_t i = 0; i < nx; i++) {
-    sx2x_sum = sx2x_sum + sx2x[i * nx + 5];
-  }
-  dqdt[5] = sx2x_sum - sink[5];
+  dqdt[5] = sx2x[0 * nx + 5] + sx2x[1 * nx + 5] + sx2x[2 * nx + 5] +
+            sx2x[3 * nx + 5] + sx2x[4 * nx + 5] + sx2x[5 * nx + 5] - sink[5];
   qv[oned_vec_index] = std::fmax(0.0, qv[oned_vec_index] + dqdt[5] * dt);
 
   // ix = 1, qx_ind[1] = 4
-  sx2x_sum = 0;
-  for (size_t i = 0; i < nx; i++) {
-    sx2x_sum = sx2x_sum + sx2x[i * nx + 4];
-  }
-  dqdt[4] = sx2x_sum - sink[4];
+  dqdt[4] = sx2x[0 * nx + 4] + sx2x[1 * nx + 4] + sx2x[2 * nx + 4] +
+            sx2x[3 * nx + 4] + sx2x[4 * nx + 4] + sx2x[5 * nx + 4] - sink[4];
   qc[oned_vec_index] = std::fmax(0.0, qc[oned_vec_index] + dqdt[4] * dt);
 
   // ix = 2, qx_ind[2] = 0
-  sx2x_sum = 0;
-  for (size_t i = 0; i < nx; i++) {
-    sx2x_sum = sx2x_sum + sx2x[i * nx + 0];
-  }
-  dqdt[0] = sx2x_sum - sink[0];
+  dqdt[0] = sx2x[0 * nx + 0] + sx2x[1 * nx + 0] + sx2x[2 * nx + 0] +
+            sx2x[3 * nx + 0] + sx2x[4 * nx + 0] + sx2x[5 * nx + 0] - sink[0];
   qr[oned_vec_index] = std::fmax(0.0, qr[oned_vec_index] + dqdt[0] * dt);
 
   // ix = 3, qx_ind[3] = 2
-  sx2x_sum = 0;
-  for (size_t i = 0; i < nx; i++) {
-    sx2x_sum = sx2x_sum + sx2x[i * nx + 2];
-  }
-  dqdt[2] = sx2x_sum - sink[2];
+  dqdt[2] = sx2x[0 * nx + 2] + sx2x[1 * nx + 2] + sx2x[2 * nx + 2] +
+            sx2x[3 * nx + 2] + sx2x[4 * nx + 2] + sx2x[5 * nx + 2] - sink[2];
   qs[oned_vec_index] = std::fmax(0.0, qs[oned_vec_index] + dqdt[2] * dt);
 
   // ix = 4, qx_ind[4] = 1
-  sx2x_sum = 0;
-  for (size_t i = 0; i < nx; i++) {
-    sx2x_sum = sx2x_sum + sx2x[i * nx + 1];
-  }
-  dqdt[1] = sx2x_sum - sink[1];
+  dqdt[1] = sx2x[0 * nx + 1] + sx2x[1 * nx + 1] + sx2x[2 * nx + 1] +
+            sx2x[3 * nx + 1] + sx2x[4 * nx + 1] + sx2x[5 * nx + 1] - sink[1];
   qi[oned_vec_index] = std::fmax(0.0, qi[oned_vec_index] + dqdt[1] * dt);
 
   // ix = 5, qx_ind[5] = 3
-  sx2x_sum = 0;
-  for (size_t i = 0; i < nx; i++) {
-    sx2x_sum = sx2x_sum + sx2x[i * nx + 3];
-  }
-  dqdt[3] = sx2x_sum - sink[3];
+  dqdt[3] = sx2x[0 * nx + 3] + sx2x[1 * nx + 3] + sx2x[2 * nx + 3] +
+            sx2x[3 * nx + 3] + sx2x[4 * nx + 3] + sx2x[5 * nx + 3] - sink[3];
   qg[oned_vec_index] = std::fmax(0.0, qg[oned_vec_index] + dqdt[3] * dt);
 
   real_t qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
@@ -411,7 +370,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   for (size_t blk = ivstart; blk < ivend; blk += BLOCK_SIZE) {
     size_t blk_end = std::min(ivend, blk + BLOCK_SIZE);
 
-    real_t sx2x[nx * nx]; // conversion rates
     real_t eflx[BLOCK_SIZE] = {
         0}; // internal energy flux from precipitation (W/m2 )
     real_t vt[BLOCK_SIZE * np] = {0};      // terminal velocity for different
@@ -436,8 +394,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         bool is_sig_present =
             qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
 
-        solidify(iv, sx2x, is_sig_present, dt, dz, t, rho, p, qv, qc, qi, qr,
-                 qs, qg, qnc);
+        solidify(iv, is_sig_present, dt, dz, t, rho, p, qv, qc, qi, qr, qs, qg,
+                 qnc);
       }
     }
 
@@ -465,8 +423,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
             bool is_sig_present = qs_qmin or qi_qmin or
                                   qg_qmin; // is snow, ice or graupel present?
 
-            solidify(nexted_vec_index, sx2x, is_sig_present, dt, dz, t, rho, p,
-                     qv, qc, qi, qr, qs, qg, qnc);
+            solidify(nexted_vec_index, is_sig_present, dt, dz, t, rho, p, qv,
+                     qc, qi, qr, qs, qg, qnc);
           }
         }
 
