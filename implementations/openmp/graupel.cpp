@@ -364,6 +364,35 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
   constexpr size_t BLOCK_SIZE = 64 / sizeof(real_t);
 
+  std::unique_ptr<uint8_t[]> kmin{new uint8_t[nvec * ke]()};
+  // From MSB to LSB: 0 0 0 0 qr qs qi qg
+
+#pragma omp parallel for
+  for (size_t k = kstart; k < ke; k++) {
+    size_t oned_vec_index;
+    bool qc_qmin, qr_qmin, qs_qmin, qi_qmin, qg_qmin;
+    for (size_t iv = ivstart; iv < ivend; iv++) {
+      oned_vec_index = k * ivend + iv;
+      qc_qmin = qc[oned_vec_index] > qmin;
+      qr_qmin = qr[oned_vec_index] > qmin;
+      qs_qmin = qs[oned_vec_index] > qmin;
+      qi_qmin = qi[oned_vec_index] > qmin;
+      qg_qmin = qg[oned_vec_index] > qmin;
+
+      kmin[iv * ke + k] =
+          (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
+
+      if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
+          ((t[oned_vec_index] < tfrz_het2) and
+           (qv[oned_vec_index] >
+            qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index])))) {
+        bool is_sig_present = qs_qmin or qi_qmin or qg_qmin;
+        solidify(oned_vec_index, is_sig_present, dt, dz, t, rho, p, qv, qc, qi,
+                 qr, qs, qg, qnc);
+      }
+    }
+  }
+
   size_t k_end = (lrain) ? ke : kstart - 1;
 #pragma omp parallel for
   for (size_t blk = ivstart; blk < ivend; blk += BLOCK_SIZE) {
@@ -371,72 +400,23 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
     real_t eflx[BLOCK_SIZE] = {
         0}; // internal energy flux from precipitation (W/m2 )
-    real_t vt[BLOCK_SIZE * np] = {0.};     // terminal velocity for different
-                                           // hydrometeor categories
-    bool kmin_flag[BLOCK_SIZE * np] = {0}; // flag for kmin
+    real_t vt[BLOCK_SIZE * np] = {0.};   // terminal velocity for different
+                                         // hydrometeor categories
+    uint8_t kmin_flag[BLOCK_SIZE] = {0}; // flag for kmin
 
     real_t prg_gsp[BLOCK_SIZE] = {0.};
     real_t prs_gsp[BLOCK_SIZE] = {0.};
     real_t pri_gsp[BLOCK_SIZE] = {0.};
     real_t prr_gsp[BLOCK_SIZE] = {0.};
 
-    for (size_t iv = blk; iv < blk_end; iv++) {
-      bool qc_qmin = qc[iv] > qmin;
-      bool qr_qmin = qr[iv] > qmin;
-      bool qs_qmin = qs[iv] > qmin;
-      bool qi_qmin = qi[iv] > qmin;
-      bool qg_qmin = qg[iv] > qmin;
-
-      kmin_flag[(iv - blk) * np] |= qr_qmin;
-      kmin_flag[(iv - blk) * np + 1] |= qi_qmin;
-      kmin_flag[(iv - blk) * np + 2] |= qs_qmin;
-      kmin_flag[(iv - blk) * np + 3] |= qg_qmin;
-
-      if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
-          ((t[iv] < tfrz_het2) and (qv[iv] > qsat_ice_rho(t[iv], rho[iv])))) {
-
-        bool is_sig_present =
-            qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
-
-        solidify(iv, is_sig_present, dt, dz, t, rho, p, qv, qc, qi, qr, qs, qg,
-                 qnc);
-      }
-    }
-
     for (size_t k = kstart; k < k_end; k++) {
       for (size_t iv = blk; iv < blk_end; iv++) {
-        bool qr_qmin = false;
-        bool qs_qmin = false;
-        bool qi_qmin = false;
-        bool qg_qmin = false;
-
-        if (k < ke - 1) {
-          size_t nexted_vec_index = (k + 1) * ivend + iv;
-
-          bool qc_qmin = qc[nexted_vec_index] > qmin;
-          qr_qmin = qr[nexted_vec_index] > qmin;
-          qs_qmin = qs[nexted_vec_index] > qmin;
-          qi_qmin = qi[nexted_vec_index] > qmin;
-          qg_qmin = qg[nexted_vec_index] > qmin;
-
-          if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
-              ((t[nexted_vec_index] < tfrz_het2) and
-               (qv[nexted_vec_index] >
-                qsat_ice_rho(t[nexted_vec_index], rho[nexted_vec_index])))) {
-
-            bool is_sig_present = qs_qmin or qi_qmin or
-                                  qg_qmin; // is snow, ice or graupel present?
-
-            solidify(nexted_vec_index, is_sig_present, dt, dz, t, rho, p, qv,
-                     qc, qi, qr, qs, qg, qnc);
-          }
-        }
-
         size_t oned_vec_index = k * ivend + iv;
 
+        kmin_flag[iv - blk] |= kmin[iv * ke + k];
+
         size_t kp1 = std::min(ke - 1, k + 1);
-        if (kmin_flag[(iv - blk) * np] or kmin_flag[(iv - blk) * np + 1] or
-            kmin_flag[(iv - blk) * np + 2] or kmin_flag[(iv - blk) * np + 3]) {
+        if (kmin_flag[iv - blk]) {
           real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
           real_t qice =
               qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
@@ -453,7 +433,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
           // qp_ind = {0, 1, 2, 3}
           // ix = 0, qp_ind[0] = 0
-          if (kmin_flag[(iv - blk) * np]) {
+          if (kmin_flag[iv - blk] & 0b1000) {
             real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qr[oned_vec_index]);
             precip<0>(qr[oned_vec_index], prr_gsp[iv - blk],
@@ -463,7 +443,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           }
 
           // ix = 1, qp_ind[1] = 1
-          if (kmin_flag[(iv - blk) * np + 1]) {
+          if (kmin_flag[iv - blk] & 0b0100) {
             real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qi[oned_vec_index]);
             precip<1>(qi[oned_vec_index], pri_gsp[iv - blk],
@@ -473,7 +453,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           }
 
           // ix = 2, qp_ind[2] = 2
-          if (kmin_flag[(iv - blk) * np + 2]) {
+          if (kmin_flag[iv - blk] & 0b0010) {
             real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qs[oned_vec_index]);
             precip<2>(qs[oned_vec_index], prs_gsp[iv - blk],
@@ -483,7 +463,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           }
 
           // ix = 3, qp_ind[3] = 3
-          if (kmin_flag[(iv - blk) * np + 3]) {
+          if (kmin_flag[iv - blk] & 0b0001) {
             real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qg[oned_vec_index]);
             precip<3>(qg[oned_vec_index], prg_gsp[iv - blk],
@@ -506,11 +486,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
               T_from_internal_energy(e_int, qv[oned_vec_index], qliq, qice,
                                      rho[oned_vec_index], dz[oned_vec_index]);
         }
-
-        kmin_flag[(iv - blk) * np] |= qr_qmin;
-        kmin_flag[(iv - blk) * np + 1] |= qi_qmin;
-        kmin_flag[(iv - blk) * np + 2] |= qs_qmin;
-        kmin_flag[(iv - blk) * np + 3] |= qg_qmin;
       }
     }
   }
