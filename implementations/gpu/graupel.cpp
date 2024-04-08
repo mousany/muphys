@@ -460,9 +460,10 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
             prs_gsp[0 : ivend], prg_gsp[0 : ivend])
   for (size_t blk = ivstart; blk < ivend; blk += BLOCK_SIZE) {
     size_t blk_end = std::min(ivend, blk + BLOCK_SIZE);
-    real_t eflx[BLOCK_SIZE]; // internal energy flux from precipitation (W/m2 )
-    real_t vt[BLOCK_SIZE * np]; // terminal velocity for different hydrometeor
-                                // categories
+    real_t eflx[BLOCK_SIZE] = {
+        0.0}; // internal energy flux from precipitation (W/m2 )
+    real_t vt[BLOCK_SIZE * np] = {0.0}; // terminal velocity for different
+                                        // hydrometeor categories
     for (size_t k = kstart; k < k_end; k++) {
       for (size_t iv = blk; iv < blk_end; iv++) {
         size_t oned_vec_index = k * ivend + iv;
