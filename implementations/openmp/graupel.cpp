@@ -325,8 +325,7 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
 void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              size_t kstart, real_t dt, real_t *dz, real_t *t, real_t *rho,
              real_t *p, real_t *qv, real_t *qc, real_t *qi, real_t *qr,
-             real_t *qs, real_t *qg, real_t qnc, real_t *prr_gsp,
-             real_t *pri_gsp, real_t *prs_gsp, real_t *prg_gsp, real_t *pflx) {
+             real_t *qs, real_t *qg, real_t qnc) {
   // std::cout << "sequential graupel" << std::endl;
 
   // nvec = ncells
@@ -372,9 +371,14 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
     real_t eflx[BLOCK_SIZE] = {
         0}; // internal energy flux from precipitation (W/m2 )
-    real_t vt[BLOCK_SIZE * np] = {0};      // terminal velocity for different
+    real_t vt[BLOCK_SIZE * np] = {0.};     // terminal velocity for different
                                            // hydrometeor categories
     bool kmin_flag[BLOCK_SIZE * np] = {0}; // flag for kmin
+
+    real_t prg_gsp[BLOCK_SIZE] = {0.};
+    real_t prs_gsp[BLOCK_SIZE] = {0.};
+    real_t pri_gsp[BLOCK_SIZE] = {0.};
+    real_t prr_gsp[BLOCK_SIZE] = {0.};
 
     for (size_t iv = blk; iv < blk_end; iv++) {
       bool qc_qmin = qc[iv] > qmin;
@@ -452,49 +456,49 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           if (kmin_flag[(iv - blk) * np]) {
             real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qr[oned_vec_index]);
-            precip<0>(qr[oned_vec_index], prr_gsp[iv], vt[(iv - blk) * np],
-                      zeta, vc, prr_gsp[iv], vt[(iv - blk) * np],
-                      qr[oned_vec_index], qr[kp1 * ivend + iv],
-                      rho[oned_vec_index]);
+            precip<0>(qr[oned_vec_index], prr_gsp[iv - blk],
+                      vt[(iv - blk) * np], zeta, vc, prr_gsp[iv - blk],
+                      vt[(iv - blk) * np], qr[oned_vec_index],
+                      qr[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
           // ix = 1, qp_ind[1] = 1
           if (kmin_flag[(iv - blk) * np + 1]) {
             real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qi[oned_vec_index]);
-            precip<1>(qi[oned_vec_index], pri_gsp[iv], vt[(iv - blk) * np + 1],
-                      zeta, vc, pri_gsp[iv], vt[(iv - blk) * np + 1],
-                      qi[oned_vec_index], qi[kp1 * ivend + iv],
-                      rho[oned_vec_index]);
+            precip<1>(qi[oned_vec_index], pri_gsp[iv - blk],
+                      vt[(iv - blk) * np + 1], zeta, vc, pri_gsp[iv - blk],
+                      vt[(iv - blk) * np + 1], qi[oned_vec_index],
+                      qi[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
           // ix = 2, qp_ind[2] = 2
           if (kmin_flag[(iv - blk) * np + 2]) {
             real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qs[oned_vec_index]);
-            precip<2>(qs[oned_vec_index], prs_gsp[iv], vt[(iv - blk) * np + 2],
-                      zeta, vc, prs_gsp[iv], vt[(iv - blk) * np + 2],
-                      qs[oned_vec_index], qs[kp1 * ivend + iv],
-                      rho[oned_vec_index]);
+            precip<2>(qs[oned_vec_index], prs_gsp[iv - blk],
+                      vt[(iv - blk) * np + 2], zeta, vc, prs_gsp[iv - blk],
+                      vt[(iv - blk) * np + 2], qs[oned_vec_index],
+                      qs[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
           // ix = 3, qp_ind[3] = 3
           if (kmin_flag[(iv - blk) * np + 3]) {
             real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qg[oned_vec_index]);
-            precip<3>(qg[oned_vec_index], prg_gsp[iv], vt[(iv - blk) * np + 3],
-                      zeta, vc, prg_gsp[iv], vt[(iv - blk) * np + 3],
-                      qg[oned_vec_index], qg[kp1 * ivend + iv],
-                      rho[oned_vec_index]);
+            precip<3>(qg[oned_vec_index], prg_gsp[iv - blk],
+                      vt[(iv - blk) * np + 3], zeta, vc, prg_gsp[iv - blk],
+                      vt[(iv - blk) * np + 3], qg[oned_vec_index],
+                      qg[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
-          pflx[oned_vec_index] = prs_gsp[iv] + pri_gsp[iv] + prg_gsp[iv];
+          real_t pflx =
+              prs_gsp[iv - blk] + pri_gsp[iv - blk] + prg_gsp[iv - blk];
           eflx[iv - blk] =
-              dt * (prr_gsp[iv] * (clw * t[oned_vec_index] -
-                                   cvd * t[kp1 * ivend + iv] - lvc) +
-                    pflx[oned_vec_index] * (ci * t[oned_vec_index] -
-                                            cvd * t[kp1 * ivend + iv] - lsc));
-          pflx[oned_vec_index] = pflx[oned_vec_index] + prr_gsp[iv];
+              dt * (prr_gsp[iv - blk] * (clw * t[oned_vec_index] -
+                                         cvd * t[kp1 * ivend + iv] - lvc) +
+                    pflx * (ci * t[oned_vec_index] - cvd * t[kp1 * ivend + iv] -
+                            lsc));
           qliq = qc[oned_vec_index] + qr[oned_vec_index];
           qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
           e_int = e_int - eflx[iv - blk];

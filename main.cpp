@@ -60,13 +60,6 @@ int main(int argc, char *argv[]) {
   prs_gsp.resize(ncells, 0.0);
   prg_gsp.resize(ncells, 0.0);
   pflx.resize(ncells * nlev, 0.0);
-#else
-  // Extra fields required to call graupel
-  std::unique_ptr<real_t[]> pflx{new real_t[ncells * nlev]()};
-  std::unique_ptr<real_t[]> prr_gsp{new real_t[ncells]()};
-  std::unique_ptr<real_t[]> pri_gsp{new real_t[ncells]()};
-  std::unique_ptr<real_t[]> prs_gsp{new real_t[ncells]()};
-  std::unique_ptr<real_t[]> prg_gsp{new real_t[ncells]()};
 #endif
 
   kbeg = 0;
@@ -84,8 +77,7 @@ int main(int argc, char *argv[]) {
 #else
   graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz.get(), t.get(), rho.get(),
           p.get(), qv.get(), qc.get(), qi.get(), qr.get(), qs.get(), qg.get(),
-          qnc_1, prr_gsp.get(), pri_gsp.get(), prs_gsp.get(), prg_gsp.get(),
-          pflx.get());
+          qnc_1);
 #endif
 
   auto end_time = std::chrono::steady_clock::now();

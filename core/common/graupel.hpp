@@ -82,6 +82,5 @@ void graupel(size_t &nvec, size_t &ke, size_t &ivstart, size_t &ivend,
 void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              size_t kstart, real_t dt, real_t *dz, real_t *t, real_t *rho,
              real_t *p, real_t *qv, real_t *qc, real_t *qi, real_t *qr,
-             real_t *qs, real_t *qg, real_t qnc, real_t *prr_gsp,
-             real_t *pri_gsp, real_t *prs_gsp, real_t *prg_gsp, real_t *pflx);
+             real_t *qs, real_t *qg, real_t qnc);
 #endif
