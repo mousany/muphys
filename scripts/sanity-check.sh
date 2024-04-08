@@ -32,11 +32,18 @@ else
   MU_IMPL=$1
 fi
 
-# if MU_IMPL is gpu, use nvc++
 if [ $MU_IMPL == "gpu" ]; then
   BUILD_CXX_COMPILER=nvc++
 else
   BUILD_CXX_COMPILER=g++
+fi
+
+if [ -z "$2" ] || [ $2 != "--double" ]; then
+  MU_ENABLE_SINGLE=ON
+  build_precision="single"
+else
+  MU_ENABLE_SINGLE=ON
+  build_precision="double"
 fi
 
 function check {
@@ -55,34 +62,16 @@ mkdir -p $BUILD_PREFIX
 cmake  -DCMAKE_CXX_COMPILER=$BUILD_CXX_COMPILER \
        -DCMAKE_CXX_FLAGS="-O0" \
        -DMU_IMPL=$MU_IMPL \
-       -DMU_ENABLE_SINGLE=ON \
-       -B $BUILD_PREFIX/build_single
+       -DMU_ENABLE_SINGLE=$MU_ENABLE_SINGLE \
+       -B $BUILD_PREFIX/build_$build_precision
 
-cmake --build $BUILD_PREFIX/build_single
+cmake --build $BUILD_PREFIX/build_$build_precision --parallel
 
-$BUILD_PREFIX/build_single/bin/graupel tasks/dbg.nc
-check reference_results/dbg_single.nc
+$BUILD_PREFIX/build_$build_precision/bin/graupel tasks/dbg.nc
+check reference_results/dbg_$build_precision.nc
 
-$BUILD_PREFIX/build_single/bin/graupel tasks/input.nc
-check reference_results/sequential_single_output.nc
+$BUILD_PREFIX/build_$build_precision/bin/graupel tasks/input.nc
+check reference_results/sequential_${build_precision}_output.nc
 
-$BUILD_PREFIX/build_single/bin/graupel tasks/20k.nc
-check reference_results/sequential_single_20k.nc
-
-
-# cmake  -DCMAKE_CXX_COMPILER=$BUILD_CXX_COMPILER \
-#        -DCMAKE_CXX_FLAGS="-O0" \
-#        -DMU_IMPL=$MU_IMPL \
-#        -DMU_ENABLE_SINGLE=OFF \
-#        -B $BUILD_PREFIX/build_double
-       
-# cmake --build $BUILD_PREFIX/build_double
-
-# $BUILD_PREFIX/build_double/bin/graupel tasks/dbg.nc
-# check reference_results/dbg_double.nc
-
-# $BUILD_PREFIX/build_double/bin/graupel tasks/input.nc
-# check reference_results/sequential_double_output.nc
-
-# $BUILD_PREFIX/build_double/bin/graupel tasks/20k.nc
-# check reference_results/sequential_double_20k.nc
+$BUILD_PREFIX/build_$build_precision/bin/graupel tasks/20k.nc
+check reference_results/sequential_${build_precision}_20k.nc
