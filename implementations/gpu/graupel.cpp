@@ -359,7 +359,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   // data type, when i reaches 0, and you try to decrement further, (to -1), it
   // wraps to the maximum value representable by size_t.
 
-  constexpr size_t BLOCK_SIZE = 64 / sizeof(real_t);
   size_t k_end = (lrain) ? ke : kstart - 1;
 #pragma omp target teams distribute parallel for simd map(                     \
         tofrom : qr[0 : ivend * ke], qi[0 : ivend * ke], qs[0 : ivend * ke],   \
@@ -367,43 +366,36 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
             t[0 : ivend * ke]) \
         map( to: rho[0 : ivend * ke], dz[0 : ivend * ke],        \
             p[0 : ivend * ke]) map(tofrom : kmin[0 : nvec * np])
-  for (size_t blk = ivstart; blk < ivend; blk += BLOCK_SIZE) {
-    size_t blk_end = std::min(ivend, blk + BLOCK_SIZE);
-
-    real_t eflx[BLOCK_SIZE] = {
-        0}; // internal energy flux from precipitation (W/m2 )
-    real_t vt[BLOCK_SIZE * np] = {0.};   // terminal velocity for different
+  for (size_t iv = ivstart; iv < ivend; iv ++) {
+    real_t eflx=0; // internal energy flux from precipitation (W/m2 )
+    real_t vt[np] = {0.};   // terminal velocity for different
     // hydrometeor categories
-    uint8_t kmin_flag[BLOCK_SIZE] = {0}; // flag for kmin
+    uint8_t kmin_flag = 0; // flag for kmin
 
-    real_t prg_gsp[BLOCK_SIZE] = {0.};
-    real_t prs_gsp[BLOCK_SIZE] = {0.};
-    real_t pri_gsp[BLOCK_SIZE] = {0.};
-    real_t prr_gsp[BLOCK_SIZE] = {0.};
+    real_t prg_gsp =0;
+    real_t prs_gsp =0;
+    real_t pri_gsp =0;
+    real_t prr_gsp =0;
 
-    for (size_t iv = blk; iv < blk_end; iv++) {
-      bool qc_qmin = qc[iv] > qmin;
-      bool qr_qmin = qr[iv] > qmin;
-      bool qs_qmin = qs[iv] > qmin;
-      bool qi_qmin = qi[iv] > qmin;
-      bool qg_qmin = qg[iv] > qmin;
+    bool qc_qmin = qc[iv] > qmin;
+    bool qr_qmin = qr[iv] > qmin;
+    bool qs_qmin = qs[iv] > qmin;
+    bool qi_qmin = qi[iv] > qmin;
+    bool qg_qmin = qg[iv] > qmin;
 
-      kmin_flag[iv - blk] =
-          (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
+    kmin_flag = (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
 
-      if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
-          ((t[iv] < tfrz_het2) and (qv[iv] > qsat_ice_rho(t[iv], rho[iv])))) {
+    if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
+        ((t[iv] < tfrz_het2) and (qv[iv] > qsat_ice_rho(t[iv], rho[iv])))) {
 
-        bool is_sig_present =
-            qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
+      bool is_sig_present =
+          qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
 
-        solidify(iv, is_sig_present, dt, dz, t, rho, p, qv, qc, qi, qr, qs, qg,
-                 qnc);
-      }
+      solidify(iv, is_sig_present, dt, dz, t, rho, p, qv, qc, qi, qr, qs, qg,
+               qnc);
     }
 
     for (size_t k = kstart; k < k_end; k++) {
-      for (size_t iv = blk; iv < blk_end; iv++) {
         bool qr_qmin = false;
         bool qs_qmin = false;
         bool qi_qmin = false;
@@ -434,7 +426,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         size_t oned_vec_index = k * ivend + iv;
 
         size_t kp1 = std::min(ke - 1, k + 1);
-        if (kmin_flag[iv - blk]) {
+        if (kmin_flag) {
           real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
           real_t qice =
               qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
@@ -442,7 +434,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           real_t e_int =
               internal_energy(t[oned_vec_index], qv[oned_vec_index], qliq, qice,
                               rho[oned_vec_index], dz[oned_vec_index]) +
-              eflx[iv - blk];
+              eflx;
           real_t zeta = dt / (2.0 * dz[oned_vec_index]);
           real_t xrho = std::sqrt(rho_00 / rho[oned_vec_index]);
 
@@ -451,66 +443,64 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
           // qp_ind = {0, 1, 2, 3}
           // ix = 0, qp_ind[0] = 0
-          if (kmin_flag[iv - blk] & 0b1000) {
+          if (kmin_flag & 0b1000) {
             real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qr[oned_vec_index]);
-            precip<0>(qr[oned_vec_index], prr_gsp[iv - blk],
-                      vt[(iv - blk) * np], zeta, vc, prr_gsp[iv - blk],
-                      vt[(iv - blk) * np], qr[oned_vec_index],
+            precip<0>(qr[oned_vec_index], prr_gsp,
+                      vt[0], zeta, vc, prr_gsp,
+                      vt[0], qr[oned_vec_index],
                       qr[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
           // ix = 1, qp_ind[1] = 1
-          if (kmin_flag[iv - blk] & 0b0100) {
+          if (kmin_flag & 0b0100) {
             real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qi[oned_vec_index]);
-            precip<1>(qi[oned_vec_index], pri_gsp[iv - blk],
-                      vt[(iv - blk) * np + 1], zeta, vc, pri_gsp[iv - blk],
-                      vt[(iv - blk) * np + 1], qi[oned_vec_index],
+            precip<1>(qi[oned_vec_index], pri_gsp,
+                      vt[1], zeta, vc, pri_gsp,
+                      vt[1], qi[oned_vec_index],
                       qi[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
           // ix = 2, qp_ind[2] = 2
-          if (kmin_flag[iv - blk] & 0b0010) {
+          if (kmin_flag & 0b0010) {
             real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qs[oned_vec_index]);
-            precip<2>(qs[oned_vec_index], prs_gsp[iv - blk],
-                      vt[(iv - blk) * np + 2], zeta, vc, prs_gsp[iv - blk],
-                      vt[(iv - blk) * np + 2], qs[oned_vec_index],
+            precip<2>(qs[oned_vec_index], prs_gsp,
+                      vt[2], zeta, vc, prs_gsp,
+                      vt[2], qs[oned_vec_index],
                       qs[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
           // ix = 3, qp_ind[3] = 3
-          if (kmin_flag[iv - blk] & 0b0001) {
+          if (kmin_flag & 0b0001) {
             real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
                                          t[oned_vec_index], qg[oned_vec_index]);
-            precip<3>(qg[oned_vec_index], prg_gsp[iv - blk],
-                      vt[(iv - blk) * np + 3], zeta, vc, prg_gsp[iv - blk],
-                      vt[(iv - blk) * np + 3], qg[oned_vec_index],
+            precip<3>(qg[oned_vec_index], prg_gsp,
+                      vt[3], zeta, vc, prg_gsp,
+                      vt[3], qg[oned_vec_index],
                       qg[kp1 * ivend + iv], rho[oned_vec_index]);
           }
 
           real_t pflx =
-              prs_gsp[iv - blk] + pri_gsp[iv - blk] + prg_gsp[iv - blk];
-          eflx[iv - blk] =
-              dt * (prr_gsp[iv - blk] * (clw * t[oned_vec_index] -
+              prs_gsp + pri_gsp + prg_gsp;
+          eflx =
+              dt * (prr_gsp * (clw * t[oned_vec_index] -
                                          cvd * t[kp1 * ivend + iv] - lvc) +
                     pflx * (ci * t[oned_vec_index] - cvd * t[kp1 * ivend + iv] -
                             lsc));
           qliq = qc[oned_vec_index] + qr[oned_vec_index];
           qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
-          e_int = e_int - eflx[iv - blk];
+          e_int = e_int - eflx;
           t[oned_vec_index] =
               T_from_internal_energy(e_int, qv[oned_vec_index], qliq, qice,
                                      rho[oned_vec_index], dz[oned_vec_index]);
         }
 
-        kmin_flag[iv - blk] |=
+        kmin_flag |=
             (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
       }
-    }
   }
-  delete[] kmin;
 }
 
 #endif // MU_ENABLE_GPU
