@@ -364,7 +364,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 #pragma omp target teams distribute parallel for simd map(                     \
         tofrom : qr[0 : ivend * ke], qi[0 : ivend * ke], qs[0 : ivend * ke],   \
             qg[0 : ivend * ke], qc[0 : ivend * ke], qv[0 : ivend * ke],        \
-            t[0 : ivend * ke], rho[0 : ivend * ke], dz[0 : ivend * ke],        \
+            t[0 : ivend * ke]) \
+        map( to: rho[0 : ivend * ke], dz[0 : ivend * ke],        \
             p[0 : ivend * ke]) map(tofrom : kmin[0 : nvec * np])
   for (size_t blk = ivstart; blk < ivend; blk += BLOCK_SIZE) {
     size_t blk_end = std::min(ivend, blk + BLOCK_SIZE);
