@@ -322,9 +322,6 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              real_t *qs, real_t *qg, real_t qnc) {
   // std::cout << "sequential graupel" << std::endl;
 
-  size_t *kmin = new size_t[nvec * np]; // first level with condensate
-  memset(kmin, -1, nvec * np * sizeof(size_t));
-
   // nvec = ncells
   // ivbeg = 0, ivend = ncells
   // kbeg = 0, kend = nlev
@@ -365,7 +362,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
             qg[0 : ivend * ke], qc[0 : ivend * ke], qv[0 : ivend * ke],        \
             t[0 : ivend * ke]) \
         map( to: rho[0 : ivend * ke], dz[0 : ivend * ke],        \
-            p[0 : ivend * ke]) map(tofrom : kmin[0 : nvec * np])
+            p[0 : ivend * ke])
   for (size_t iv = ivstart; iv < ivend; iv ++) {
     real_t eflx=0; // internal energy flux from precipitation (W/m2 )
     real_t vt[np] = {0.};   // terminal velocity for different
