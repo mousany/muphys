@@ -74,38 +74,37 @@ void pack_props(size_t nvec, size_t ke, std::unique_ptr<Properties[]> &props,
                 real_t *qc, real_t *qi, real_t *qr, real_t *qs, real_t *qg) {
   props.reset(new (std::align_val_t(64)) Properties[nvec * ke]);
 
+  const size_t i_start = kstart * nvec;
+  const size_t i_end = ke * nvec;
+
 #pragma omp parallel for
-  for (size_t k = kstart; k < ke; k++) {
-    for (size_t iv = ivstart; iv < ivend; iv++) {
-      size_t oned_vec_index = k * nvec + iv;
-      props[k * nvec + iv].qv = qv[oned_vec_index];
-      props[k * nvec + iv].qc = qc[oned_vec_index];
-      props[k * nvec + iv].qi = qi[oned_vec_index];
-      props[k * nvec + iv].qr = qr[oned_vec_index];
-      props[k * nvec + iv].qs = qs[oned_vec_index];
-      props[k * nvec + iv].qg = qg[oned_vec_index];
-    }
+  for (size_t oned_vec_index = i_start; oned_vec_index < i_end;
+       oned_vec_index++) {
+    props[oned_vec_index].qv = qv[oned_vec_index];
+    props[oned_vec_index].qc = qc[oned_vec_index];
+    props[oned_vec_index].qi = qi[oned_vec_index];
+    props[oned_vec_index].qr = qr[oned_vec_index];
+    props[oned_vec_index].qs = qs[oned_vec_index];
+    props[oned_vec_index].qg = qg[oned_vec_index];
   }
 }
 
 void unpack_props(size_t nvec, size_t ke, std::unique_ptr<Properties[]> &props,
                   size_t ivstart, size_t ivend, size_t kstart, real_t *qv,
                   real_t *qc, real_t *qi, real_t *qr, real_t *qs, real_t *qg) {
-
+  const size_t i_start = kstart * nvec;
+  const size_t i_end = ke * nvec;
 #pragma omp parallel for
-  for (size_t k = kstart; k < ke; k++) {
-    for (size_t iv = ivstart; iv < ivend; iv++) {
-      size_t oned_vec_index = k * nvec + iv;
-      qv[oned_vec_index] = props[k * nvec + iv].qv;
-      qc[oned_vec_index] = props[k * nvec + iv].qc;
-      qi[oned_vec_index] = props[k * nvec + iv].qi;
-      qr[oned_vec_index] = props[k * nvec + iv].qr;
-      qs[oned_vec_index] = props[k * nvec + iv].qs;
-      qg[oned_vec_index] = props[k * nvec + iv].qg;
-    }
+  for (size_t oned_vec_index = i_start; oned_vec_index < i_end;
+       oned_vec_index++) {
+    qv[oned_vec_index] = props[oned_vec_index].qv;
+    qc[oned_vec_index] = props[oned_vec_index].qc;
+    qi[oned_vec_index] = props[oned_vec_index].qi;
+    qr[oned_vec_index] = props[oned_vec_index].qr;
+    qs[oned_vec_index] = props[oned_vec_index].qs;
+    qg[oned_vec_index] = props[oned_vec_index].qg;
   }
 }
-
 // data[r, c, k]
 // r: R, c: C from input, k: K constant
 // r linear increase, c any
