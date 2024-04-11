@@ -31,6 +31,15 @@ using namespace graupel_ct;
 //   array_1d_t<real_t> &x;
 // }; // pointer vector
 
+struct Properties {
+  real_t qv;
+  real_t qc;
+  real_t qi;
+  real_t qr;
+  real_t qs;
+  real_t qg;
+};
+
 /**
  * @brief TODO
  *
@@ -60,6 +69,43 @@ TARGET void precip(real_t &precip_0, real_t &precip_1, real_t &precip_2,
   precip_2 = vc * fall_speed<idx>(rho_x); // vt
 }
 
+void pack_props(size_t nvec, size_t ke, std::unique_ptr<Properties[]> &props,
+                size_t ivstart, size_t ivend, size_t kstart, real_t *qv,
+                real_t *qc, real_t *qi, real_t *qr, real_t *qs, real_t *qg) {
+  props.reset(new (std::align_val_t(64)) Properties[nvec * ke]);
+
+#pragma omp parallel for
+  for (size_t k = kstart; k < ke; k++) {
+    for (size_t iv = ivstart; iv < ivend; iv++) {
+      size_t oned_vec_index = k * nvec + iv;
+      props[k * nvec + iv].qv = qv[oned_vec_index];
+      props[k * nvec + iv].qc = qc[oned_vec_index];
+      props[k * nvec + iv].qi = qi[oned_vec_index];
+      props[k * nvec + iv].qr = qr[oned_vec_index];
+      props[k * nvec + iv].qs = qs[oned_vec_index];
+      props[k * nvec + iv].qg = qg[oned_vec_index];
+    }
+  }
+}
+
+void unpack_props(size_t nvec, size_t ke, std::unique_ptr<Properties[]> &props,
+                  size_t ivstart, size_t ivend, size_t kstart, real_t *qv,
+                  real_t *qc, real_t *qi, real_t *qr, real_t *qs, real_t *qg) {
+
+#pragma omp parallel for
+  for (size_t k = kstart; k < ke; k++) {
+    for (size_t iv = ivstart; iv < ivend; iv++) {
+      size_t oned_vec_index = k * nvec + iv;
+      qv[oned_vec_index] = props[k * nvec + iv].qv;
+      qc[oned_vec_index] = props[k * nvec + iv].qc;
+      qi[oned_vec_index] = props[k * nvec + iv].qi;
+      qr[oned_vec_index] = props[k * nvec + iv].qr;
+      qs[oned_vec_index] = props[k * nvec + iv].qs;
+      qg[oned_vec_index] = props[k * nvec + iv].qg;
+    }
+  }
+}
+
 // data[r, c, k]
 // r: R, c: C from input, k: K constant
 // r linear increase, c any
@@ -79,41 +125,44 @@ TARGET void precip(real_t &precip_0, real_t &precip_1, real_t &precip_2,
 //      G depends on an internal state from r-1, c and data[r+1, c, k]
 
 TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
-                     real_t *dz, real_t *t, real_t *rho, real_t *p, real_t *qv,
-                     real_t *qc, real_t *qi, real_t *qr, real_t *qs, real_t *qg,
-                     real_t qnc) {
+                     real_t *dz, real_t *t, real_t *rho, real_t *p,
+                     Properties *props, real_t qnc) {
 
   real_t sx2x[nx * nx] = {0.}; // conversion rates
 
-  real_t dvsw =
-      qv[oned_vec_index] - qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
+  real_t dvsw = props[oned_vec_index].qv -
+                qsat_rho(t[oned_vec_index], rho[oned_vec_index]);
   real_t qvsi = qsat_ice_rho(t[oned_vec_index], rho[oned_vec_index]);
-  real_t dvsi = qv[oned_vec_index] - qvsi;
-  real_t n_snow =
-      snow_number(t[oned_vec_index], rho[oned_vec_index], qs[oned_vec_index]);
-  real_t l_snow = snow_lambda(rho[oned_vec_index], qs[oned_vec_index], n_snow);
+  real_t dvsi = props[oned_vec_index].qv - qvsi;
+  real_t n_snow = snow_number(t[oned_vec_index], rho[oned_vec_index],
+                              props[oned_vec_index].qs);
+  real_t l_snow =
+      snow_lambda(rho[oned_vec_index], props[oned_vec_index].qs, n_snow);
 
-  sx2x[lqc * nx + lqr] = cloud_to_rain(t[oned_vec_index], qc[oned_vec_index],
-                                       qr[oned_vec_index], qnc);
-  sx2x[lqr * nx + lqv] =
-      rain_to_vapor(t[oned_vec_index], rho[oned_vec_index], qc[oned_vec_index],
-                    qr[oned_vec_index], dvsw, dt);
-  sx2x[lqc * nx + lqi] = cloud_x_ice(t[oned_vec_index], qc[oned_vec_index],
-                                     qi[oned_vec_index], dt);
+  sx2x[lqc * nx + lqr] =
+      cloud_to_rain(t[oned_vec_index], props[oned_vec_index].qc,
+                    props[oned_vec_index].qr, qnc);
+  sx2x[lqr * nx + lqv] = rain_to_vapor(t[oned_vec_index], rho[oned_vec_index],
+                                       props[oned_vec_index].qc,
+                                       props[oned_vec_index].qr, dvsw, dt);
+  sx2x[lqc * nx + lqi] =
+      cloud_x_ice(t[oned_vec_index], props[oned_vec_index].qc,
+                  props[oned_vec_index].qi, dt);
   sx2x[lqi * nx + lqc] = -std::fmin(sx2x[lqc * nx + lqi], 0.0);
   sx2x[lqc * nx + lqi] = std::fmax(sx2x[lqc * nx + lqi], 0.0);
-  sx2x[lqc * nx + lqs] = cloud_to_snow(t[oned_vec_index], qc[oned_vec_index],
-                                       qs[oned_vec_index], n_snow, l_snow);
+  sx2x[lqc * nx + lqs] =
+      cloud_to_snow(t[oned_vec_index], props[oned_vec_index].qc,
+                    props[oned_vec_index].qs, n_snow, l_snow);
   sx2x[lqc * nx + lqg] =
       cloud_to_graupel(t[oned_vec_index], rho[oned_vec_index],
-                       qc[oned_vec_index], qg[oned_vec_index]);
+                       props[oned_vec_index].qc, props[oned_vec_index].qg);
 
   real_t ice_dep = 0.0;
   real_t eta = 0.0;
 
   if (t[oned_vec_index] < tmelt) {
     real_t n_ice = ice_number(t[oned_vec_index], rho[oned_vec_index]);
-    real_t m_ice = ice_mass(qi[oned_vec_index], n_ice);
+    real_t m_ice = ice_mass(props[oned_vec_index].qi, n_ice);
     real_t x_ice = ice_sticking(t[oned_vec_index]);
 
     if (is_sig_present) {
@@ -121,31 +170,31 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
           deposition_factor(t[oned_vec_index],
                             qvsi); // neglect cloud depth cor. from gcsp_graupel
       sx2x[lqv * nx + lqi] =
-          vapor_x_ice(qi[oned_vec_index], m_ice, eta, dvsi, dt);
+          vapor_x_ice(props[oned_vec_index].qi, m_ice, eta, dvsi, dt);
       sx2x[lqi * nx + lqv] = -std::fmin(sx2x[lqv * nx + lqi], 0.0);
       sx2x[lqv * nx + lqi] = std::fmax(sx2x[lqv * nx + lqi], 0.0);
       ice_dep = std::fmin(sx2x[lqv * nx + lqi], dvsi / dt);
 
       sx2x[lqi * nx + lqs] =
-          deposition_auto_conversion(qi[oned_vec_index], m_ice, ice_dep);
+          deposition_auto_conversion(props[oned_vec_index].qi, m_ice, ice_dep);
       sx2x[lqi * nx + lqs] =
           sx2x[lqi * nx + lqs] +
-          ice_to_snow(qi[oned_vec_index], n_snow, l_snow, x_ice);
-      sx2x[lqi * nx + lqg] =
-          ice_to_graupel(rho[oned_vec_index], qr[oned_vec_index],
-                         qg[oned_vec_index], qi[oned_vec_index], x_ice);
+          ice_to_snow(props[oned_vec_index].qi, n_snow, l_snow, x_ice);
+      sx2x[lqi * nx + lqg] = ice_to_graupel(
+          rho[oned_vec_index], props[oned_vec_index].qr,
+          props[oned_vec_index].qg, props[oned_vec_index].qi, x_ice);
       sx2x[lqs * nx + lqg] =
           snow_to_graupel(t[oned_vec_index], rho[oned_vec_index],
-                          qc[oned_vec_index], qs[oned_vec_index]);
+                          props[oned_vec_index].qc, props[oned_vec_index].qs);
       sx2x[lqr * nx + lqg] = rain_to_graupel(
-          t[oned_vec_index], rho[oned_vec_index], qc[oned_vec_index],
-          qr[oned_vec_index], qi[oned_vec_index], qs[oned_vec_index], m_ice,
-          dvsw, dt);
+          t[oned_vec_index], rho[oned_vec_index], props[oned_vec_index].qc,
+          props[oned_vec_index].qr, props[oned_vec_index].qi,
+          props[oned_vec_index].qs, m_ice, dvsw, dt);
     }
     sx2x[lqv * nx + lqi] =
         sx2x[lqv * nx + lqi] +
-        ice_deposition_nucleation(t[oned_vec_index], qc[oned_vec_index],
-                                  qi[oned_vec_index], n_ice, dvsi, dt);
+        ice_deposition_nucleation(t[oned_vec_index], props[oned_vec_index].qc,
+                                  props[oned_vec_index].qi, n_ice, dvsi, dt);
   } else {
     sx2x[lqc * nx + lqr] =
         sx2x[lqc * nx + lqr] + sx2x[lqc * nx + lqs] + sx2x[lqc * nx + lqg];
@@ -156,24 +205,25 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
   }
 
   if (is_sig_present) {
-    real_t dvsw0 = qv[oned_vec_index] - qsat_rho(tmelt, rho[oned_vec_index]);
+    real_t dvsw0 =
+        props[oned_vec_index].qv - qsat_rho(tmelt, rho[oned_vec_index]);
     sx2x[lqv * nx + lqs] =
         vapor_x_snow(t[oned_vec_index], p[oned_vec_index], rho[oned_vec_index],
-                     qs[oned_vec_index], n_snow, l_snow, eta, ice_dep, dvsw,
-                     dvsi, dvsw0, dt);
+                     props[oned_vec_index].qs, n_snow, l_snow, eta, ice_dep,
+                     dvsw, dvsi, dvsw0, dt);
     sx2x[lqs * nx + lqv] = -std::fmin(sx2x[lqv * nx + lqs], 0.0);
     sx2x[lqv * nx + lqs] = std::fmax(sx2x[lqv * nx + lqs], 0.0);
     sx2x[lqv * nx + lqg] = vapor_x_graupel(
         t[oned_vec_index], p[oned_vec_index], rho[oned_vec_index],
-        qg[oned_vec_index], dvsw, dvsi, dvsw0, dt);
+        props[oned_vec_index].qg, dvsw, dvsi, dvsw0, dt);
     sx2x[lqg * nx + lqv] = -std::fmin(sx2x[lqv * nx + lqg], 0.0);
     sx2x[lqv * nx + lqg] = std::fmax(sx2x[lqv * nx + lqg], 0.0);
     sx2x[lqs * nx + lqr] =
         snow_to_rain(t[oned_vec_index], p[oned_vec_index], rho[oned_vec_index],
-                     dvsw0, qs[oned_vec_index]);
+                     dvsw0, props[oned_vec_index].qs);
     sx2x[lqg * nx + lqr] =
         graupel_to_rain(t[oned_vec_index], p[oned_vec_index],
-                        rho[oned_vec_index], dvsw0, qg[oned_vec_index]);
+                        rho[oned_vec_index], dvsw0, props[oned_vec_index].qg);
   }
 
   real_t stot = 0.0;
@@ -186,8 +236,8 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
   if ((is_sig_present) or (5 == lqc) or (5 == lqv) or (5 == lqr)) {
     sink[5] = sx2x[5 * nx + 0] + sx2x[5 * nx + 1] + sx2x[5 * nx + 2] +
               sx2x[5 * nx + 3] + sx2x[5 * nx + 4] + sx2x[5 * nx + 5];
-    stot = qv[oned_vec_index] / dt;
-    if ((sink[5] > stot) && (qv[oned_vec_index] > qmin)) {
+    stot = props[oned_vec_index].qv / dt;
+    if ((sink[5] > stot) && (props[oned_vec_index].qv > qmin)) {
 #pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[5 * nx + i] = sx2x[5 * nx + i] * stot / sink[5];
@@ -202,8 +252,8 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
   if ((is_sig_present) or (4 == lqc) or (4 == lqv) or (4 == lqr)) {
     sink[4] = sx2x[4 * nx + 0] + sx2x[4 * nx + 1] + sx2x[4 * nx + 2] +
               sx2x[4 * nx + 3] + sx2x[4 * nx + 4] + sx2x[4 * nx + 5];
-    stot = qc[oned_vec_index] / dt;
-    if ((sink[4] > stot) && (qc[oned_vec_index] > qmin)) {
+    stot = props[oned_vec_index].qc / dt;
+    if ((sink[4] > stot) && (props[oned_vec_index].qc > qmin)) {
 #pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[4 * nx + i] = sx2x[4 * nx + i] * stot / sink[4];
@@ -218,8 +268,8 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
   if ((is_sig_present) or (0 == lqc) or (0 == lqv) or (0 == lqr)) {
     sink[0] = sx2x[0 * nx + 0] + sx2x[0 * nx + 1] + sx2x[0 * nx + 2] +
               sx2x[0 * nx + 3] + sx2x[0 * nx + 4] + sx2x[0 * nx + 5];
-    stot = qr[oned_vec_index] / dt;
-    if ((sink[0] > stot) && (qr[oned_vec_index] > qmin)) {
+    stot = props[oned_vec_index].qr / dt;
+    if ((sink[0] > stot) && (props[oned_vec_index].qr > qmin)) {
 #pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[0 * nx + i] = sx2x[0 * nx + i] * stot / sink[0];
@@ -234,8 +284,8 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
   if ((is_sig_present) or (2 == lqc) or (2 == lqv) or (2 == lqr)) {
     sink[2] = sx2x[2 * nx + 0] + sx2x[2 * nx + 1] + sx2x[2 * nx + 2] +
               sx2x[2 * nx + 3] + sx2x[2 * nx + 4] + sx2x[2 * nx + 5];
-    stot = qs[oned_vec_index] / dt;
-    if ((sink[2] > stot) && (qs[oned_vec_index] > qmin)) {
+    stot = props[oned_vec_index].qs / dt;
+    if ((sink[2] > stot) && (props[oned_vec_index].qs > qmin)) {
 #pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[2 * nx + i] = sx2x[2 * nx + i] * stot / sink[2];
@@ -250,8 +300,8 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
   if ((is_sig_present) or (1 == lqc) or (1 == lqv) or (1 == lqr)) {
     sink[1] = sx2x[1 * nx + 0] + sx2x[1 * nx + 1] + sx2x[1 * nx + 2] +
               sx2x[1 * nx + 3] + sx2x[1 * nx + 4] + sx2x[1 * nx + 5];
-    stot = qi[oned_vec_index] / dt;
-    if ((sink[1] > stot) && (qi[oned_vec_index] > qmin)) {
+    stot = props[oned_vec_index].qi / dt;
+    if ((sink[1] > stot) && (props[oned_vec_index].qi > qmin)) {
 #pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[1 * nx + i] = sx2x[1 * nx + i] * stot / sink[1];
@@ -266,8 +316,8 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
   if ((is_sig_present) or (3 == lqc) or (3 == lqv) or (3 == lqr)) {
     sink[3] = sx2x[3 * nx + 0] + sx2x[3 * nx + 1] + sx2x[3 * nx + 2] +
               sx2x[3 * nx + 3] + sx2x[3 * nx + 4] + sx2x[3 * nx + 5];
-    stot = qg[oned_vec_index] / dt;
-    if ((sink[3] > stot) && (qg[oned_vec_index] > qmin)) {
+    stot = props[oned_vec_index].qg / dt;
+    if ((sink[3] > stot) && (props[oned_vec_index].qg > qmin)) {
 #pragma omp simd
       for (size_t i = 0; i < nx; i++) {
         sx2x[3 * nx + i] = sx2x[3 * nx + i] * stot / sink[3];
@@ -281,36 +331,43 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
   // ix = 0, qx_ind[0] = 5
   dqdt[5] = sx2x[0 * nx + 5] + sx2x[1 * nx + 5] + sx2x[2 * nx + 5] +
             sx2x[3 * nx + 5] + sx2x[4 * nx + 5] + sx2x[5 * nx + 5] - sink[5];
-  qv[oned_vec_index] = std::fmax(0.0, qv[oned_vec_index] + dqdt[5] * dt);
+  props[oned_vec_index].qv =
+      std::fmax(0.0, props[oned_vec_index].qv + dqdt[5] * dt);
 
   // ix = 1, qx_ind[1] = 4
   dqdt[4] = sx2x[0 * nx + 4] + sx2x[1 * nx + 4] + sx2x[2 * nx + 4] +
             sx2x[3 * nx + 4] + sx2x[4 * nx + 4] + sx2x[5 * nx + 4] - sink[4];
-  qc[oned_vec_index] = std::fmax(0.0, qc[oned_vec_index] + dqdt[4] * dt);
+  props[oned_vec_index].qc =
+      std::fmax(0.0, props[oned_vec_index].qc + dqdt[4] * dt);
 
   // ix = 2, qx_ind[2] = 0
   dqdt[0] = sx2x[0 * nx + 0] + sx2x[1 * nx + 0] + sx2x[2 * nx + 0] +
             sx2x[3 * nx + 0] + sx2x[4 * nx + 0] + sx2x[5 * nx + 0] - sink[0];
-  qr[oned_vec_index] = std::fmax(0.0, qr[oned_vec_index] + dqdt[0] * dt);
+  props[oned_vec_index].qr =
+      std::fmax(0.0, props[oned_vec_index].qr + dqdt[0] * dt);
 
   // ix = 3, qx_ind[3] = 2
   dqdt[2] = sx2x[0 * nx + 2] + sx2x[1 * nx + 2] + sx2x[2 * nx + 2] +
             sx2x[3 * nx + 2] + sx2x[4 * nx + 2] + sx2x[5 * nx + 2] - sink[2];
-  qs[oned_vec_index] = std::fmax(0.0, qs[oned_vec_index] + dqdt[2] * dt);
+  props[oned_vec_index].qs =
+      std::fmax(0.0, props[oned_vec_index].qs + dqdt[2] * dt);
 
   // ix = 4, qx_ind[4] = 1
   dqdt[1] = sx2x[0 * nx + 1] + sx2x[1 * nx + 1] + sx2x[2 * nx + 1] +
             sx2x[3 * nx + 1] + sx2x[4 * nx + 1] + sx2x[5 * nx + 1] - sink[1];
-  qi[oned_vec_index] = std::fmax(0.0, qi[oned_vec_index] + dqdt[1] * dt);
+  props[oned_vec_index].qi =
+      std::fmax(0.0, props[oned_vec_index].qi + dqdt[1] * dt);
 
   // ix = 5, qx_ind[5] = 3
   dqdt[3] = sx2x[0 * nx + 3] + sx2x[1 * nx + 3] + sx2x[2 * nx + 3] +
             sx2x[3 * nx + 3] + sx2x[4 * nx + 3] + sx2x[5 * nx + 3] - sink[3];
-  qg[oned_vec_index] = std::fmax(0.0, qg[oned_vec_index] + dqdt[3] * dt);
+  props[oned_vec_index].qg =
+      std::fmax(0.0, props[oned_vec_index].qg + dqdt[3] * dt);
 
-  real_t qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
-  real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
-  real_t qtot = qv[oned_vec_index] + qice + qliq;
+  real_t qice = props[oned_vec_index].qs + props[oned_vec_index].qi +
+                props[oned_vec_index].qg;
+  real_t qliq = props[oned_vec_index].qc + props[oned_vec_index].qr;
+  real_t qtot = props[oned_vec_index].qv + qice + qliq;
   real_t cv = cvd + (cvv - cvd) * qtot + (clw - cvv) * qliq +
               (ci - cvv) * qice; // qtot? or qv?
   t[oned_vec_index] =
@@ -327,6 +384,9 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              real_t *p, real_t *qv, real_t *qc, real_t *qi, real_t *qr,
              real_t *qs, real_t *qg, real_t qnc) {
   // std::cout << "sequential graupel" << std::endl;
+
+  std::unique_ptr<Properties[]> props;
+  pack_props(nvec, ke, props, ivstart, ivend, kstart, qv, qc, qi, qr, qs, qg);
 
   // nvec = ncells
   // ivbeg = 0, ivend = ncells
@@ -381,23 +441,23 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
     real_t prr_gsp[BLOCK_SIZE] = {0.};
 
     for (size_t iv = blk; iv < blk_end; iv++) {
-      bool qc_qmin = qc[iv] > qmin;
-      bool qr_qmin = qr[iv] > qmin;
-      bool qs_qmin = qs[iv] > qmin;
-      bool qi_qmin = qi[iv] > qmin;
-      bool qg_qmin = qg[iv] > qmin;
+      bool qc_qmin = props[iv].qc > qmin;
+      bool qr_qmin = props[iv].qr > qmin;
+      bool qs_qmin = props[iv].qs > qmin;
+      bool qi_qmin = props[iv].qi > qmin;
+      bool qg_qmin = props[iv].qg > qmin;
 
       kmin_flag[iv - blk] =
           (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
 
       if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
-          ((t[iv] < tfrz_het2) and (qv[iv] > qsat_ice_rho(t[iv], rho[iv])))) {
+          ((t[iv] < tfrz_het2) and
+           (props[iv].qv > qsat_ice_rho(t[iv], rho[iv])))) {
 
         bool is_sig_present =
             qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
 
-        solidify(iv, is_sig_present, dt, dz, t, rho, p, qv, qc, qi, qr, qs, qg,
-                 qnc);
+        solidify(iv, is_sig_present, dt, dz, t, rho, p, props.get(), qnc);
       }
     }
 
@@ -411,22 +471,22 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
         if (k < ke - 1) {
           size_t nexted_vec_index = (k + 1) * ivend + iv;
 
-          bool qc_qmin = qc[nexted_vec_index] > qmin;
-          qr_qmin = qr[nexted_vec_index] > qmin;
-          qs_qmin = qs[nexted_vec_index] > qmin;
-          qi_qmin = qi[nexted_vec_index] > qmin;
-          qg_qmin = qg[nexted_vec_index] > qmin;
+          bool qc_qmin = props[nexted_vec_index].qc > qmin;
+          qr_qmin = props[nexted_vec_index].qr > qmin;
+          qs_qmin = props[nexted_vec_index].qs > qmin;
+          qi_qmin = props[nexted_vec_index].qi > qmin;
+          qg_qmin = props[nexted_vec_index].qg > qmin;
 
           if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
               ((t[nexted_vec_index] < tfrz_het2) and
-               (qv[nexted_vec_index] >
+               (props[nexted_vec_index].qv >
                 qsat_ice_rho(t[nexted_vec_index], rho[nexted_vec_index])))) {
 
             bool is_sig_present = qs_qmin or qi_qmin or
                                   qg_qmin; // is snow, ice or graupel present?
 
-            solidify(nexted_vec_index, is_sig_present, dt, dz, t, rho, p, qv,
-                     qc, qi, qr, qs, qg, qnc);
+            solidify(nexted_vec_index, is_sig_present, dt, dz, t, rho, p,
+                     props.get(), qnc);
           }
         }
 
@@ -434,13 +494,13 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
         size_t kp1 = std::min(ke - 1, k + 1);
         if (kmin_flag[iv - blk]) {
-          real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
-          real_t qice =
-              qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
+          real_t qliq = props[oned_vec_index].qc + props[oned_vec_index].qr;
+          real_t qice = props[oned_vec_index].qs + props[oned_vec_index].qi +
+                        props[oned_vec_index].qg;
 
           real_t e_int =
-              internal_energy(t[oned_vec_index], qv[oned_vec_index], qliq, qice,
-                              rho[oned_vec_index], dz[oned_vec_index]) +
+              internal_energy(t[oned_vec_index], props[oned_vec_index].qv, qliq,
+                              qice, rho[oned_vec_index], dz[oned_vec_index]) +
               eflx[iv - blk];
           real_t zeta = dt / (2.0 * dz[oned_vec_index]);
           real_t xrho = std::sqrt(rho_00 / rho[oned_vec_index]);
@@ -451,42 +511,46 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           // qp_ind = {0, 1, 2, 3}
           // ix = 0, qp_ind[0] = 0
           if (kmin_flag[iv - blk] & 0b1000) {
-            real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
-                                         t[oned_vec_index], qr[oned_vec_index]);
-            precip<0>(qr[oned_vec_index], prr_gsp[iv - blk],
+            real_t vc =
+                vel_scale_factor(0, xrho, rho[oned_vec_index],
+                                 t[oned_vec_index], props[oned_vec_index].qr);
+            precip<0>(props[oned_vec_index].qr, prr_gsp[iv - blk],
                       vt[(iv - blk) * np], zeta, vc, prr_gsp[iv - blk],
-                      vt[(iv - blk) * np], qr[oned_vec_index],
-                      qr[kp1 * ivend + iv], rho[oned_vec_index]);
+                      vt[(iv - blk) * np], props[oned_vec_index].qr,
+                      props[kp1 * ivend + iv].qr, rho[oned_vec_index]);
           }
 
           // ix = 1, qp_ind[1] = 1
           if (kmin_flag[iv - blk] & 0b0100) {
-            real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
-                                         t[oned_vec_index], qi[oned_vec_index]);
-            precip<1>(qi[oned_vec_index], pri_gsp[iv - blk],
+            real_t vc =
+                vel_scale_factor(1, xrho, rho[oned_vec_index],
+                                 t[oned_vec_index], props[oned_vec_index].qi);
+            precip<1>(props[oned_vec_index].qi, pri_gsp[iv - blk],
                       vt[(iv - blk) * np + 1], zeta, vc, pri_gsp[iv - blk],
-                      vt[(iv - blk) * np + 1], qi[oned_vec_index],
-                      qi[kp1 * ivend + iv], rho[oned_vec_index]);
+                      vt[(iv - blk) * np + 1], props[oned_vec_index].qi,
+                      props[kp1 * ivend + iv].qi, rho[oned_vec_index]);
           }
 
           // ix = 2, qp_ind[2] = 2
           if (kmin_flag[iv - blk] & 0b0010) {
-            real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
-                                         t[oned_vec_index], qs[oned_vec_index]);
-            precip<2>(qs[oned_vec_index], prs_gsp[iv - blk],
+            real_t vc =
+                vel_scale_factor(2, xrho, rho[oned_vec_index],
+                                 t[oned_vec_index], props[oned_vec_index].qs);
+            precip<2>(props[oned_vec_index].qs, prs_gsp[iv - blk],
                       vt[(iv - blk) * np + 2], zeta, vc, prs_gsp[iv - blk],
-                      vt[(iv - blk) * np + 2], qs[oned_vec_index],
-                      qs[kp1 * ivend + iv], rho[oned_vec_index]);
+                      vt[(iv - blk) * np + 2], props[oned_vec_index].qs,
+                      props[kp1 * ivend + iv].qs, rho[oned_vec_index]);
           }
 
           // ix = 3, qp_ind[3] = 3
           if (kmin_flag[iv - blk] & 0b0001) {
-            real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
-                                         t[oned_vec_index], qg[oned_vec_index]);
-            precip<3>(qg[oned_vec_index], prg_gsp[iv - blk],
+            real_t vc =
+                vel_scale_factor(3, xrho, rho[oned_vec_index],
+                                 t[oned_vec_index], props[oned_vec_index].qg);
+            precip<3>(props[oned_vec_index].qg, prg_gsp[iv - blk],
                       vt[(iv - blk) * np + 3], zeta, vc, prg_gsp[iv - blk],
-                      vt[(iv - blk) * np + 3], qg[oned_vec_index],
-                      qg[kp1 * ivend + iv], rho[oned_vec_index]);
+                      vt[(iv - blk) * np + 3], props[oned_vec_index].qg,
+                      props[kp1 * ivend + iv].qg, rho[oned_vec_index]);
           }
 
           real_t pflx =
@@ -496,12 +560,13 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
                                          cvd * t[kp1 * ivend + iv] - lvc) +
                     pflx * (ci * t[oned_vec_index] - cvd * t[kp1 * ivend + iv] -
                             lsc));
-          qliq = qc[oned_vec_index] + qr[oned_vec_index];
-          qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
+          qliq = props[oned_vec_index].qc + props[oned_vec_index].qr;
+          qice = props[oned_vec_index].qs + props[oned_vec_index].qi +
+                 props[oned_vec_index].qg;
           e_int = e_int - eflx[iv - blk];
-          t[oned_vec_index] =
-              T_from_internal_energy(e_int, qv[oned_vec_index], qliq, qice,
-                                     rho[oned_vec_index], dz[oned_vec_index]);
+          t[oned_vec_index] = T_from_internal_energy(
+              e_int, props[oned_vec_index].qv, qliq, qice, rho[oned_vec_index],
+              dz[oned_vec_index]);
         }
 
         kmin_flag[iv - blk] |=
@@ -509,6 +574,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
       }
     }
   }
+
+  unpack_props(nvec, ke, props, ivstart, ivend, kstart, qv, qc, qi, qr, qs, qg);
 }
 
 #endif // MU_ENABLE_OMP
