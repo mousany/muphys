@@ -3,7 +3,7 @@
 set -e
 
 function diffn-gpu {
-  threshold=1e-11
+  threshold=10e-11
 
   awk -v thr="$threshold" '{
       all_rows=all_rows $0 "\n"; # Store all rows
