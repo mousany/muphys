@@ -55,3 +55,7 @@ reference_results/*.zip
 
 .vscode/
 run/
+*.log
+*.ncu-rep
+*.nsys-rep
+lib/
