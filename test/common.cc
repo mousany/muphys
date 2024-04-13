@@ -17,6 +17,10 @@
 #include "core/common/graupel.hpp"
 #include "core/common/utils.hpp"
 
+#if defined(MU_ENABLE_GPU)
+#include <cuda_runtime.h>
+#endif
+
 TEST(CommonTest, CommonTestSuite_CheckPrecision) {
 #ifdef __SINGLE_PRECISION
   EXPECT_EQ(typeid(float), typeid(real_t));
@@ -661,6 +665,9 @@ TEST(UtilsTestSuite, CalcDz) {
 #if defined(MU_ENABLE_SEQ)
   array_1d_t<real_t> z = {1.0, -2.0, 1.0, 4.0, 5.0, 6.0};
   array_1d_t<real_t> dz;
+#elif defined(MU_ENABLE_OMP)
+  std::unique_ptr<real_t[]> z{new real_t[6]{1.0, -2.0, 1.0, 4.0, 5.0, 6.0}};
+  std::unique_ptr<real_t[]> dz;
 #else
   std::unique_ptr<real_t[]> z{new real_t[6]{1.0, -2.0, 1.0, 4.0, 5.0, 6.0}};
   real_t *dz;
@@ -682,4 +689,8 @@ TEST(UtilsTestSuite, CalcDz) {
 
   for (size_t i = 0; i < ncells * nlev; i++)
     EXPECT_DOUBLE_EQ(dz[i], expected[i]);
+
+#ifdef MU_ENABLE_GPU
+  cudaFreeHost(dz);
+#endif
 }

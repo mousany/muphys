@@ -18,7 +18,10 @@
 #include "core/common/utils.hpp"
 #include "io/io.hpp"
 #include <chrono>
+
+#if defined(MU_ENABLE_GPU)
 #include <cuda_runtime.h>
+#endif
 
 int main(int argc, char *argv[]) {
   // Parameters from the command line
@@ -36,11 +39,16 @@ int main(int argc, char *argv[]) {
   array_1d_t<real_t> dz;
   // Extra fields required to call graupel
   array_1d_t<real_t> pflx, prr_gsp, pri_gsp, prs_gsp, prg_gsp;
+#elif defined(MU_ENABLE_OMP)
+  // Parameters from the input file
+  std::unique_ptr<real_t[]> z, t, p, rho, qv, qc, qi, qr, qs, qg;
+  // Pre-calculated parameters
+  std::unique_ptr<real_t[]> dz;
 #else
   // Parameters from the input file
-  real_t  *z, *t, *p, *rho, *qv, *qc,* qi, *qr, *qs, *qg;
+  real_t *z, *t, *p, *rho, *qv, *qc, *qi, *qr, *qs, *qg;
   // Pre-calculated parameters
-  real_t * dz;
+  real_t *dz;
 #endif
 
   // start-end indices
@@ -51,6 +59,8 @@ int main(int argc, char *argv[]) {
                          qi, qr, qs, qg);
 #if defined(MU_ENABLE_SEQ)
   utils_muphys::calc_dz(z, dz, ncells, nlev);
+#elif defined(MU_ENABLE_OMP)
+  utils_muphys::calc_dz(z.get(), dz, ncells, nlev);
 #else
   utils_muphys::calc_dz(z, dz, ncells, nlev);
 #endif
@@ -75,10 +85,13 @@ int main(int argc, char *argv[]) {
 #if defined(MU_ENABLE_SEQ)
   graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz, t, rho, p, qv, qc, qi, qr, qs,
           qg, qnc_1, prr_gsp, pri_gsp, prs_gsp, prg_gsp, pflx);
-#else
-  graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz, t, rho,
-          p, qv, qc, qi, qr, qs, qg,
+#elif defined(MU_ENABLE_OMP)
+  graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz.get(), t.get(), rho.get(),
+          p.get(), qv.get(), qc.get(), qi.get(), qr.get(), qs.get(), qg.get(),
           qnc_1);
+#else
+  graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz, t, rho, p, qv, qc, qi, qr, qs,
+          qg, qnc_1);
 #endif
 
   auto end_time = std::chrono::steady_clock::now();
@@ -87,9 +100,11 @@ int main(int argc, char *argv[]) {
 
 #if defined(MU_ENABLE_SEQ)
   io_muphys::write_fields(output_file, ncells, nlev, t, qv, qc, qi, qr, qs, qg);
+#elif defined(MU_ENABLE_OMP)
+  io_muphys::write_fields(output_file, ncells, nlev, t.get(), qv.get(),
+                          qc.get(), qi.get(), qr.get(), qs.get(), qg.get());
 #else
-  io_muphys::write_fields(output_file, ncells, nlev, t, qv,
-                          qc, qi, qr, qs, qg);
+  io_muphys::write_fields(output_file, ncells, nlev, t, qv, qc, qi, qr, qs, qg);
 #endif
 
   std::cout << "time taken : " << duration.count() << " milliseconds"
