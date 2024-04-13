@@ -11,16 +11,22 @@
 //
 #include "utils.hpp"
 #include <iostream>
-#include <cuda_runtime.h>
+#ifdef MU_ENABLE_GPU
+# include <cuda_runtime.h>
+#endif
 
 #if defined(MU_ENABLE_SEQ)
 void utils_muphys::calc_dz(array_1d_t<real_t> &z, array_1d_t<real_t> &dz,
                            size_t &ncells, size_t &nlev) {
   dz.resize(ncells * nlev);
-#else
+#elif defined(MU_ENABLE_GPU)
 void utils_muphys::calc_dz(real_t *z, real_t* &dz,
                            size_t ncells, size_t nlev) {
   cudaHostAlloc(&dz, ncells*nlev*sizeof(real_t), 0);
+#else
+  void utils_muphys::calc_dz(real_t *z, real_t* &dz,
+                           size_t ncells, size_t nlev) {
+  dz = new real_t[ncells*nlev];
 #endif
 
 #if defined(MU_ENABLE_SEQ)

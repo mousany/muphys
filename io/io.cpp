@@ -88,11 +88,16 @@ void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
                              const string input, size_t &ncells, size_t &nlev,
                              size_t itime) {
   v.resize(ncells * nlev);
-#else
+#elif defined(MU_ENABLE_GPU)
 void io_muphys::input_vector(NcFile &datafile, real_t* &v,
                              const string &input, size_t ncells, size_t nlev,
                              size_t itime) {
   cudaHostAlloc(&v, ncells*nlev*sizeof(real_t), 0);
+#else
+  void io_muphys::input_vector(NcFile &datafile, real_t* &v,
+                             const string &input, size_t ncells, size_t nlev,
+                             size_t itime) {
+    v = new real_t[ncells*nlev];
 #endif
 
   NcVar att = datafile.getVar(input);

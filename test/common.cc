@@ -663,7 +663,7 @@ TEST(UtilsTestSuite, CalcDz) {
   array_1d_t<real_t> dz;
 #else
   std::unique_ptr<real_t[]> z{new real_t[6]{1.0, -2.0, 1.0, 4.0, 5.0, 6.0}};
-  std::unique_ptr<real_t[]> dz;
+  real_t *dz;
 #endif
   size_t ncells = 3;
   size_t nlev = 2;
