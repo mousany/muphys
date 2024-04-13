@@ -50,6 +50,7 @@ elseif ("${MU_IMPL}" STREQUAL "gpu")
         add_link_options(-mp=gpu -gpu=${MU_GPU_VERSION})
         #target_sources(muphys_cpp PRIVATE "implementations/gpu/graupel.cpp")
     endif()
+    find_package(CUDAToolkit REQUIRED)
 else()
     message(FATAL_ERROR "${MU_IMPL} is not a valid configuration.")
 endif ()
@@ -69,8 +70,12 @@ endif ()
 # build project executable
 add_executable(graupel "main.cpp")
 
-# link dependency libs
-target_link_libraries(graupel muphys_core muphys_io muphys_implementation)
+if ("${MU_IMPL}" STREQUAL "gpu")
+    target_link_libraries(graupel muphys_core muphys_io muphys_implementation CUDA::cudart CUDA::cuda_driver)
+else()
+    # link dependency libs
+    target_link_libraries(graupel muphys_core muphys_io muphys_implementation)
+endif()
 target_include_directories(graupel PUBLIC
                           "${PROJECT_BINARY_DIR}"
                           "${PROJECT_SOURCE_DIR}/core"

@@ -18,6 +18,7 @@
 #include "core/common/utils.hpp"
 #include "io/io.hpp"
 #include <chrono>
+#include <cuda_runtime.h>
 
 int main(int argc, char *argv[]) {
   // Parameters from the command line
@@ -97,6 +98,18 @@ int main(int argc, char *argv[]) {
   if (std::getenv("MU_LOG_TIME")) {
     io_muphys::log_time(duration.count());
   }
+#ifdef MU_ENABLE_GPU
+  cudaFreeHost(dz);
+  cudaFreeHost(t);
+  cudaFreeHost(rho);
+  cudaFreeHost(p);
+  cudaFreeHost(qv);
+  cudaFreeHost(qc);
+  cudaFreeHost(qi);
+  cudaFreeHost(qr);
+  cudaFreeHost(qs);
+  cudaFreeHost(qg);
+#endif
 
   return 0;
 }
