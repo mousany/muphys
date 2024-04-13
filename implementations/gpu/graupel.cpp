@@ -316,6 +316,10 @@ TARGET void solidify(size_t oned_vec_index, bool is_sig_present, real_t dt,
       cv;
 }
 
+void transpose(real_t* a, int n, int m)
+{
+}
+
 void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
              size_t kstart, real_t dt, real_t *dz, real_t *t, real_t *rho,
              real_t *p, real_t *qv, real_t *qc, real_t *qi, real_t *qr,
@@ -355,8 +359,10 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   // The loop is intentionally i<nlev; since we are using an unsigned integer
   // data type, when i reaches 0, and you try to decrement further, (to -1), it
   // wraps to the maximum value representable by size_t.
+  constexpr int CHUNK_SIZE=512;
 
   size_t k_end = (lrain) ? ke : kstart - 1;
+  std::cerr<<kstart<<" "<<k_end<<" "<<ivend<<"\n";
 #pragma omp target teams distribute parallel for simd map(                     \
         tofrom : qr[0 : ivend * ke], qi[0 : ivend * ke], qs[0 : ivend * ke],   \
             qg[0 : ivend * ke], qc[0 : ivend * ke], qv[0 : ivend * ke],        \

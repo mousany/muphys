@@ -18,7 +18,7 @@ namespace utils_muphys {
 void calc_dz(array_1d_t<real_t> &z, array_1d_t<real_t> &dz, size_t &ncells,
              size_t &nlev);
 #else
-void calc_dz(real_t *z, std::unique_ptr<real_t[]> &dz, size_t ncells,
+void calc_dz(real_t *z, real_t* &dz, size_t ncells,
              size_t nlev);
 #endif
 

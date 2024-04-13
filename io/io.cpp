@@ -12,6 +12,7 @@
 #include "io.hpp"
 #include <algorithm>
 #include <map>
+#include <cuda_runtime.h>
 
 static const int NC_ERR = 2;
 static const std::string BASE_VAR = "zg";
@@ -52,9 +53,9 @@ void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
   v.resize(ncells * nlev);
 #else
 /* read-in time-constant data fields without a time dimension */
-void io_muphys::input_vector(NcFile &datafile, std::unique_ptr<real_t[]> &v,
+void io_muphys::input_vector(NcFile &datafile, real_t* &v,
                              const string &input, size_t ncells, size_t nlev) {
-  v.reset(new (std::align_val_t(64)) real_t[ncells * nlev]);
+  cudaHostAlloc(&v, ncells*nlev*sizeof(real_t), 0);
 #endif
 
   NcVar var;
@@ -72,7 +73,7 @@ void io_muphys::input_vector(NcFile &datafile, std::unique_ptr<real_t[]> &v,
 #if defined(MU_ENABLE_SEQ)
     var.getVar({0, 0}, {nlev, ncells}, v.data());
 #else
-    var.getVar({0, 0}, {nlev, ncells}, v.get());
+    var.getVar({0, 0}, {nlev, ncells}, v);
 #endif
   } catch (NcNotVar &e) {
     cout << "FAILURE in reading values from " << input
@@ -88,10 +89,10 @@ void io_muphys::input_vector(NcFile &datafile, array_1d_t<real_t> &v,
                              size_t itime) {
   v.resize(ncells * nlev);
 #else
-void io_muphys::input_vector(NcFile &datafile, std::unique_ptr<real_t[]> &v,
+void io_muphys::input_vector(NcFile &datafile, real_t* &v,
                              const string &input, size_t ncells, size_t nlev,
                              size_t itime) {
-  v.reset(new (std::align_val_t(64)) real_t[ncells * nlev]);
+  cudaHostAlloc(&v, ncells*nlev*sizeof(real_t), 0);
 #endif
 
   NcVar att = datafile.getVar(input);
@@ -103,7 +104,7 @@ void io_muphys::input_vector(NcFile &datafile, std::unique_ptr<real_t[]> &v,
 #if defined(MU_ENABLE_SEQ)
     att.getVar({itime, 0, 0}, {1, nlev, ncells}, v.data());
 #else
-    att.getVar({itime, 0, 0}, {1, nlev, ncells}, v.get());
+    att.getVar({itime, 0, 0}, {1, nlev, ncells}, v);
 #endif
   } catch (NcException &e) {
     e.what();
@@ -181,11 +182,16 @@ void io_muphys::read_fields(const string input_file, size_t &itime,
 #else
 void io_muphys::read_fields(
     const std::string &input_file, size_t &itime, size_t &ncells, size_t &nlev,
-    std::unique_ptr<real_t[]> &z, std::unique_ptr<real_t[]> &t,
-    std::unique_ptr<real_t[]> &p, std::unique_ptr<real_t[]> &rho,
-    std::unique_ptr<real_t[]> &qv, std::unique_ptr<real_t[]> &qc,
-    std::unique_ptr<real_t[]> &qi, std::unique_ptr<real_t[]> &qr,
-    std::unique_ptr<real_t[]> &qs, std::unique_ptr<real_t[]> &qg) {
+    real_t* &z,
+    real_t* &t,
+    real_t* &p,
+    real_t* &rho,
+    real_t* &qv,
+    real_t* &qc,
+    real_t* &qi,
+    real_t* &qr,
+    real_t* &qs,
+    real_t* &qg) {
 #endif
   NcFile datafile(input_file, NcFile::read);
 

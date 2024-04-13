@@ -11,15 +11,16 @@
 //
 #include "utils.hpp"
 #include <iostream>
+#include <cuda_runtime.h>
 
 #if defined(MU_ENABLE_SEQ)
 void utils_muphys::calc_dz(array_1d_t<real_t> &z, array_1d_t<real_t> &dz,
                            size_t &ncells, size_t &nlev) {
   dz.resize(ncells * nlev);
 #else
-void utils_muphys::calc_dz(real_t *z, std::unique_ptr<real_t[]> &dz,
+void utils_muphys::calc_dz(real_t *z, real_t* &dz,
                            size_t ncells, size_t nlev) {
-  dz.reset(new (std::align_val_t(64)) real_t[ncells * nlev]);
+  cudaHostAlloc(&dz, ncells*nlev*sizeof(real_t), 0);
 #endif
 
 #if defined(MU_ENABLE_SEQ)

@@ -37,9 +37,9 @@ int main(int argc, char *argv[]) {
   array_1d_t<real_t> pflx, prr_gsp, pri_gsp, prs_gsp, prg_gsp;
 #else
   // Parameters from the input file
-  std::unique_ptr<real_t[]> z, t, p, rho, qv, qc, qi, qr, qs, qg;
+  real_t  *z, *t, *p, *rho, *qv, *qc,* qi, *qr, *qs, *qg;
   // Pre-calculated parameters
-  std::unique_ptr<real_t[]> dz;
+  real_t * dz;
 #endif
 
   // start-end indices
@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
 #if defined(MU_ENABLE_SEQ)
   utils_muphys::calc_dz(z, dz, ncells, nlev);
 #else
-  utils_muphys::calc_dz(z.get(), dz, ncells, nlev);
+  utils_muphys::calc_dz(z, dz, ncells, nlev);
 #endif
 
 #if defined(MU_ENABLE_SEQ)
@@ -75,8 +75,8 @@ int main(int argc, char *argv[]) {
   graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz, t, rho, p, qv, qc, qi, qr, qs,
           qg, qnc_1, prr_gsp, pri_gsp, prs_gsp, prg_gsp, pflx);
 #else
-  graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz.get(), t.get(), rho.get(),
-          p.get(), qv.get(), qc.get(), qi.get(), qr.get(), qs.get(), qg.get(),
+  graupel(nvec, kend, ivbeg, ivend, kbeg, dt, dz, t, rho,
+          p, qv, qc, qi, qr, qs, qg,
           qnc_1);
 #endif
 
@@ -87,8 +87,8 @@ int main(int argc, char *argv[]) {
 #if defined(MU_ENABLE_SEQ)
   io_muphys::write_fields(output_file, ncells, nlev, t, qv, qc, qi, qr, qs, qg);
 #else
-  io_muphys::write_fields(output_file, ncells, nlev, t.get(), qv.get(),
-                          qc.get(), qi.get(), qr.get(), qs.get(), qg.get());
+  io_muphys::write_fields(output_file, ncells, nlev, t, qv,
+                          qc, qi, qr, qs, qg);
 #endif
 
   std::cout << "time taken : " << duration.count() << " milliseconds"
