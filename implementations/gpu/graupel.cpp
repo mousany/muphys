@@ -437,7 +437,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
     is_device_ptr(qg_d) is_device_ptr(qc_d) is_device_ptr(qv_d)                \
     is_device_ptr(t_d) is_device_ptr(rho_d) is_device_ptr(dz_d)                \
     is_device_ptr(p_d) is_device_ptr(internals)
-#pragma omp parallel for
+#pragma omp teams distribute parallel for
     for (size_t iv = ivstart; iv < ivend; iv++) {
       for (size_t k = pipeline; k < pipeline_end; k++) {
         bool qc_qmin = false;
