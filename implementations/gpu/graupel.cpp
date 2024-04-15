@@ -388,49 +388,14 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 
   const size_t PIPELINE_SIZE = ke / 2;
 
-  cudaMemcpy(qr_d, qr, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(qi_d, qi, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(qs_d, qs, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(qg_d, qg, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(qc_d, qc, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(qv_d, qv, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(t_d, t, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(rho_d, rho, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(dz_d, dz, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-  cudaMemcpy(p_d, p, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
-#pragma omp task
-#pragma omp target is_device_ptr(qr_d) is_device_ptr(qi_d) is_device_ptr(qs_d) \
-    is_device_ptr(qg_d) is_device_ptr(qc_d) is_device_ptr(qv_d)                \
-    is_device_ptr(t_d) is_device_ptr(rho_d) is_device_ptr(dz_d)                \
-    is_device_ptr(p_d) is_device_ptr(internals)
-#pragma omp parallel for
-  for (size_t iv = ivstart; iv < ivend; iv++) {
-    bool qc_qmin = qc_d[iv] > qmin;
-    bool qr_qmin = qr_d[iv] > qmin;
-    bool qs_qmin = qs_d[iv] > qmin;
-    bool qi_qmin = qi_d[iv] > qmin;
-    bool qg_qmin = qg_d[iv] > qmin;
-
-    if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
-        ((t_d[iv] < tfrz_het2) and
-         (qv_d[iv] > qsat_ice_rho(t_d[iv], rho_d[iv]))) or
-        (t_d[iv] < tfrz_het2)) {
-
-      bool is_sig_present =
-          qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
-
-      solidify(iv, is_sig_present, dt, dz_d, t_d, rho_d, p_d, qv_d, qc_d, qi_d,
-               qr_d, qs_d, qg_d, qnc);
-    }
-
-    internals[iv].kmin_flag =
-        (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
-  }
-
   for (size_t pipeline = 0; pipeline < ke; pipeline += PIPELINE_SIZE) {
     size_t pipeline_end = std::min(ke, pipeline + PIPELINE_SIZE);
 
     size_t transfer = std::min(ke, pipeline + 1);
+    if (pipeline == 0) {
+      transfer = 0;
+    }
+
     size_t transfer_end = std::min(ke, pipeline + 1 + PIPELINE_SIZE);
     if (transfer < transfer_end) {
       cudaMemcpy(qr_d + transfer * ivend, qr + transfer * ivend,
@@ -475,10 +440,34 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
 #pragma omp parallel for
     for (size_t iv = ivstart; iv < ivend; iv++) {
       for (size_t k = pipeline; k < pipeline_end; k++) {
+        bool qc_qmin = false;
         bool qr_qmin = false;
         bool qs_qmin = false;
         bool qi_qmin = false;
         bool qg_qmin = false;
+
+        if (k == 0) {
+          qc_qmin = qc_d[iv] > qmin;
+          qr_qmin = qr_d[iv] > qmin;
+          qs_qmin = qs_d[iv] > qmin;
+          qi_qmin = qi_d[iv] > qmin;
+          qg_qmin = qg_d[iv] > qmin;
+
+          if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
+              ((t_d[iv] < tfrz_het2) and
+               (qv_d[iv] > qsat_ice_rho(t_d[iv], rho_d[iv]))) or
+              (t_d[iv] < tfrz_het2)) {
+
+            bool is_sig_present = qs_qmin or qi_qmin or
+                                  qg_qmin; // is snow, ice or graupel present?
+
+            solidify(iv, is_sig_present, dt, dz_d, t_d, rho_d, p_d, qv_d, qc_d,
+                     qi_d, qr_d, qs_d, qg_d, qnc);
+          }
+
+          internals[iv].kmin_flag =
+              (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
+        }
 
         if (k < ke - 1) {
           size_t nexted_vec_index = (k + 1) * ivend + iv;
