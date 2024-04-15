@@ -374,141 +374,244 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   cudaMalloc(&internals, sizeof(Internals) * nvec);
   cudaMemset(internals, 0, sizeof(Internals) * nvec);
 
-  size_t k_end = (lrain) ? ke : kstart - 1;
+  real_t *qr_d, *qi_d, *qs_d, *qg_d, *qc_d, *qv_d, *t_d, *rho_d, *dz_d, *p_d;
+  cudaMalloc(&qr_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&qi_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&qs_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&qg_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&qc_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&qv_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&t_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&rho_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&dz_d, sizeof(real_t) * nvec * ke);
+  cudaMalloc(&p_d, sizeof(real_t) * nvec * ke);
 
-#pragma omp target teams distribute parallel for is_device_ptr(internals)      \
-    map(tofrom : qr[0 : ivend * ke], qi[0 : ivend * ke], qs[0 : ivend * ke],   \
-            qg[0 : ivend * ke], qc[0 : ivend * ke], qv[0 : ivend * ke],        \
-            t[0 : ivend * ke])                                                 \
-    map(to : rho[0 : ivend * ke], dz[0 : ivend * ke], p[0 : ivend * ke])
+  const size_t PIPELINE_SIZE = ke / 2;
+
+  cudaMemcpy(qr_d, qr, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(qi_d, qi, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(qs_d, qs, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(qg_d, qg, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(qc_d, qc, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(qv_d, qv, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(t_d, t, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(rho_d, rho, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(dz_d, dz, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+  cudaMemcpy(p_d, p, sizeof(real_t) * nvec * 1, cudaMemcpyHostToDevice);
+#pragma omp task
+#pragma omp target is_device_ptr(qr_d) is_device_ptr(qi_d) is_device_ptr(qs_d) \
+    is_device_ptr(qg_d) is_device_ptr(qc_d) is_device_ptr(qv_d)                \
+    is_device_ptr(t_d) is_device_ptr(rho_d) is_device_ptr(dz_d)                \
+    is_device_ptr(p_d) is_device_ptr(internals)
+#pragma omp parallel for
   for (size_t iv = ivstart; iv < ivend; iv++) {
-    bool qc_qmin = qc[iv] > qmin;
-    bool qr_qmin = qr[iv] > qmin;
-    bool qs_qmin = qs[iv] > qmin;
-    bool qi_qmin = qi[iv] > qmin;
-    bool qg_qmin = qg[iv] > qmin;
+    bool qc_qmin = qc_d[iv] > qmin;
+    bool qr_qmin = qr_d[iv] > qmin;
+    bool qs_qmin = qs_d[iv] > qmin;
+    bool qi_qmin = qi_d[iv] > qmin;
+    bool qg_qmin = qg_d[iv] > qmin;
 
     if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
-        ((t[iv] < tfrz_het2) and (qv[iv] > qsat_ice_rho(t[iv], rho[iv])))) {
+        ((t_d[iv] < tfrz_het2) and
+         (qv_d[iv] > qsat_ice_rho(t_d[iv], rho_d[iv]))) or
+        (t_d[iv] < tfrz_het2)) {
 
       bool is_sig_present =
           qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
 
-      solidify(iv, is_sig_present, dt, dz, t, rho, p, qv, qc, qi, qr, qs, qg,
-               qnc);
+      solidify(iv, is_sig_present, dt, dz_d, t_d, rho_d, p_d, qv_d, qc_d, qi_d,
+               qr_d, qs_d, qg_d, qnc);
     }
 
     internals[iv].kmin_flag =
         (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
+  }
 
-    for (size_t k = kstart; k < k_end; k++) {
-      bool qr_qmin = false;
-      bool qs_qmin = false;
-      bool qi_qmin = false;
-      bool qg_qmin = false;
+  for (size_t pipeline = 0; pipeline < ke; pipeline += PIPELINE_SIZE) {
+    size_t pipeline_end = std::min(ke, pipeline + PIPELINE_SIZE);
 
-      if (k < ke - 1) {
-        size_t nexted_vec_index = (k + 1) * ivend + iv;
+    size_t transfer = std::min(ke, pipeline + 1);
+    size_t transfer_end = std::min(ke, pipeline + 1 + PIPELINE_SIZE);
+    if (transfer < transfer_end) {
+      cudaMemcpy(qr_d + transfer * ivend, qr + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(qi_d + transfer * ivend, qi + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(qs_d + transfer * ivend, qs + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(qg_d + transfer * ivend, qg + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(qc_d + transfer * ivend, qc + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(qv_d + transfer * ivend, qv + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(t_d + transfer * ivend, t + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(rho_d + transfer * ivend, rho + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(dz_d + transfer * ivend, dz + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+      cudaMemcpy(p_d + transfer * ivend, p + transfer * ivend,
+                 sizeof(real_t) * nvec * (transfer_end - transfer),
+                 cudaMemcpyHostToDevice);
+    }
 
-        bool qc_qmin = qc[nexted_vec_index] > qmin;
-        qr_qmin = qr[nexted_vec_index] > qmin;
-        qs_qmin = qs[nexted_vec_index] > qmin;
-        qi_qmin = qi[nexted_vec_index] > qmin;
-        qg_qmin = qg[nexted_vec_index] > qmin;
+#pragma omp taskwait
 
-        if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
-            ((t[nexted_vec_index] < tfrz_het2) and
-             (qv[nexted_vec_index] >
-              qsat_ice_rho(t[nexted_vec_index], rho[nexted_vec_index])))) {
+#pragma omp task
+#pragma omp target is_device_ptr(qr_d) is_device_ptr(qi_d) is_device_ptr(qs_d) \
+    is_device_ptr(qg_d) is_device_ptr(qc_d) is_device_ptr(qv_d)                \
+    is_device_ptr(t_d) is_device_ptr(rho_d) is_device_ptr(dz_d)                \
+    is_device_ptr(p_d) is_device_ptr(internals)
+#pragma omp parallel for
+    for (size_t iv = ivstart; iv < ivend; iv++) {
+      for (size_t k = pipeline; k < pipeline_end; k++) {
+        bool qr_qmin = false;
+        bool qs_qmin = false;
+        bool qi_qmin = false;
+        bool qg_qmin = false;
 
-          bool is_sig_present =
-              qs_qmin or qi_qmin or qg_qmin; // is snow, ice or graupel present?
+        if (k < ke - 1) {
+          size_t nexted_vec_index = (k + 1) * ivend + iv;
 
-          solidify(nexted_vec_index, is_sig_present, dt, dz, t, rho, p, qv, qc,
-                   qi, qr, qs, qg, qnc);
+          bool qc_qmin = qc_d[nexted_vec_index] > qmin;
+          qr_qmin = qr_d[nexted_vec_index] > qmin;
+          qs_qmin = qs_d[nexted_vec_index] > qmin;
+          qi_qmin = qi_d[nexted_vec_index] > qmin;
+          qg_qmin = qg_d[nexted_vec_index] > qmin;
+
+          if ((qc_qmin or qr_qmin or qs_qmin or qi_qmin or qg_qmin) or
+              ((t_d[nexted_vec_index] < tfrz_het2) and
+               (qv_d[nexted_vec_index] >
+                qsat_ice_rho(t_d[nexted_vec_index],
+                             rho_d[nexted_vec_index])))) {
+
+            bool is_sig_present = qs_qmin or qi_qmin or
+                                  qg_qmin; // is snow, ice or graupel present?
+
+            solidify(nexted_vec_index, is_sig_present, dt, dz_d, t_d, rho_d,
+                     p_d, qv_d, qc_d, qi_d, qr_d, qs_d, qg_d, qnc);
+          }
         }
+
+        size_t oned_vec_index = k * ivend + iv;
+
+        size_t kp1 = std::min(ke - 1, k + 1);
+        if (internals[iv].kmin_flag) {
+          real_t qliq = qc_d[oned_vec_index] + qr_d[oned_vec_index];
+          real_t qice = qs_d[oned_vec_index] + qi_d[oned_vec_index] +
+                        qg_d[oned_vec_index];
+
+          real_t e_int =
+              internal_energy(t_d[oned_vec_index], qv_d[oned_vec_index], qliq,
+                              qice, rho_d[oned_vec_index],
+                              dz_d[oned_vec_index]) +
+              internals[iv].eflx;
+          real_t zeta = dt / (2.0 * dz_d[oned_vec_index]);
+          real_t xrho = std::sqrt(rho_00 / rho_d[oned_vec_index]);
+
+          // real_t update[3]; // scratch array with output from precipitation
+          // step
+
+          // qp_ind = {0, 1, 2, 3}
+          // ix = 0, qp_ind[0] = 0
+          if (internals[iv].kmin_flag & 0b1000) {
+            real_t vc =
+                vel_scale_factor(0, xrho, rho_d[oned_vec_index],
+                                 t_d[oned_vec_index], qr_d[oned_vec_index]);
+            precip<0>(qr_d[oned_vec_index], internals[iv].prr_gsp,
+                      internals[iv].vt[0], zeta, vc, internals[iv].prr_gsp,
+                      internals[iv].vt[0], qr_d[oned_vec_index],
+                      qr_d[kp1 * ivend + iv], rho_d[oned_vec_index]);
+          }
+
+          // ix = 1, qp_ind[1] = 1
+          if (internals[iv].kmin_flag & 0b0100) {
+            real_t vc =
+                vel_scale_factor(1, xrho, rho_d[oned_vec_index],
+                                 t_d[oned_vec_index], qi_d[oned_vec_index]);
+            precip<1>(qi_d[oned_vec_index], internals[iv].pri_gsp,
+                      internals[iv].vt[1], zeta, vc, internals[iv].pri_gsp,
+                      internals[iv].vt[1], qi_d[oned_vec_index],
+                      qi_d[kp1 * ivend + iv], rho_d[oned_vec_index]);
+          }
+
+          // ix = 2, qp_ind[2] = 2
+          if (internals[iv].kmin_flag & 0b0010) {
+            real_t vc =
+                vel_scale_factor(2, xrho, rho_d[oned_vec_index],
+                                 t_d[oned_vec_index], qs_d[oned_vec_index]);
+            precip<2>(qs_d[oned_vec_index], internals[iv].prs_gsp,
+                      internals[iv].vt[2], zeta, vc, internals[iv].prs_gsp,
+                      internals[iv].vt[2], qs_d[oned_vec_index],
+                      qs_d[kp1 * ivend + iv], rho_d[oned_vec_index]);
+          }
+
+          // ix = 3, qp_ind[3] = 3
+          if (internals[iv].kmin_flag & 0b0001) {
+            real_t vc =
+                vel_scale_factor(3, xrho, rho_d[oned_vec_index],
+                                 t_d[oned_vec_index], qg_d[oned_vec_index]);
+            precip<3>(qg_d[oned_vec_index], internals[iv].prg_gsp,
+                      internals[iv].vt[3], zeta, vc, internals[iv].prg_gsp,
+                      internals[iv].vt[3], qg_d[oned_vec_index],
+                      qg_d[kp1 * ivend + iv], rho_d[oned_vec_index]);
+          }
+
+          real_t pflx = internals[iv].prs_gsp + internals[iv].pri_gsp +
+                        internals[iv].prg_gsp;
+          internals[iv].eflx =
+              dt *
+              (internals[iv].prr_gsp * (clw * t_d[oned_vec_index] -
+                                        cvd * t_d[kp1 * ivend + iv] - lvc) +
+               pflx * (ci * t_d[oned_vec_index] - cvd * t_d[kp1 * ivend + iv] -
+                       lsc));
+          qliq = qc_d[oned_vec_index] + qr_d[oned_vec_index];
+          qice = qs_d[oned_vec_index] + qi_d[oned_vec_index] +
+                 qg_d[oned_vec_index];
+          e_int = e_int - internals[iv].eflx;
+          t_d[oned_vec_index] = T_from_internal_energy(
+              e_int, qv_d[oned_vec_index], qliq, qice, rho_d[oned_vec_index],
+              dz_d[oned_vec_index]);
+        }
+
+        internals[iv].kmin_flag |=
+            (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
       }
-
-      size_t oned_vec_index = k * ivend + iv;
-
-      size_t kp1 = std::min(ke - 1, k + 1);
-      if (internals[iv].kmin_flag) {
-        real_t qliq = qc[oned_vec_index] + qr[oned_vec_index];
-        real_t qice =
-            qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
-
-        real_t e_int =
-            internal_energy(t[oned_vec_index], qv[oned_vec_index], qliq, qice,
-                            rho[oned_vec_index], dz[oned_vec_index]) +
-            internals[iv].eflx;
-        real_t zeta = dt / (2.0 * dz[oned_vec_index]);
-        real_t xrho = std::sqrt(rho_00 / rho[oned_vec_index]);
-
-        // real_t update[3]; // scratch array with output from precipitation
-        // step
-
-        // qp_ind = {0, 1, 2, 3}
-        // ix = 0, qp_ind[0] = 0
-        if (internals[iv].kmin_flag & 0b1000) {
-          real_t vc = vel_scale_factor(0, xrho, rho[oned_vec_index],
-                                       t[oned_vec_index], qr[oned_vec_index]);
-          precip<0>(qr[oned_vec_index], internals[iv].prr_gsp,
-                    internals[iv].vt[0], zeta, vc, internals[iv].prr_gsp,
-                    internals[iv].vt[0], qr[oned_vec_index],
-                    qr[kp1 * ivend + iv], rho[oned_vec_index]);
-        }
-
-        // ix = 1, qp_ind[1] = 1
-        if (internals[iv].kmin_flag & 0b0100) {
-          real_t vc = vel_scale_factor(1, xrho, rho[oned_vec_index],
-                                       t[oned_vec_index], qi[oned_vec_index]);
-          precip<1>(qi[oned_vec_index], internals[iv].pri_gsp,
-                    internals[iv].vt[1], zeta, vc, internals[iv].pri_gsp,
-                    internals[iv].vt[1], qi[oned_vec_index],
-                    qi[kp1 * ivend + iv], rho[oned_vec_index]);
-        }
-
-        // ix = 2, qp_ind[2] = 2
-        if (internals[iv].kmin_flag & 0b0010) {
-          real_t vc = vel_scale_factor(2, xrho, rho[oned_vec_index],
-                                       t[oned_vec_index], qs[oned_vec_index]);
-          precip<2>(qs[oned_vec_index], internals[iv].prs_gsp,
-                    internals[iv].vt[2], zeta, vc, internals[iv].prs_gsp,
-                    internals[iv].vt[2], qs[oned_vec_index],
-                    qs[kp1 * ivend + iv], rho[oned_vec_index]);
-        }
-
-        // ix = 3, qp_ind[3] = 3
-        if (internals[iv].kmin_flag & 0b0001) {
-          real_t vc = vel_scale_factor(3, xrho, rho[oned_vec_index],
-                                       t[oned_vec_index], qg[oned_vec_index]);
-          precip<3>(qg[oned_vec_index], internals[iv].prg_gsp,
-                    internals[iv].vt[3], zeta, vc, internals[iv].prg_gsp,
-                    internals[iv].vt[3], qg[oned_vec_index],
-                    qg[kp1 * ivend + iv], rho[oned_vec_index]);
-        }
-
-        real_t pflx = internals[iv].prs_gsp + internals[iv].pri_gsp +
-                      internals[iv].prg_gsp;
-        internals[iv].eflx =
-            dt *
-            (internals[iv].prr_gsp *
-                 (clw * t[oned_vec_index] - cvd * t[kp1 * ivend + iv] - lvc) +
-             pflx * (ci * t[oned_vec_index] - cvd * t[kp1 * ivend + iv] - lsc));
-        qliq = qc[oned_vec_index] + qr[oned_vec_index];
-        qice = qs[oned_vec_index] + qi[oned_vec_index] + qg[oned_vec_index];
-        e_int = e_int - internals[iv].eflx;
-        t[oned_vec_index] =
-            T_from_internal_energy(e_int, qv[oned_vec_index], qliq, qice,
-                                   rho[oned_vec_index], dz[oned_vec_index]);
-      }
-
-      internals[iv].kmin_flag |=
-          (qr_qmin << 3) | (qi_qmin << 2) | (qs_qmin << 1) | (qg_qmin << 0);
     }
   }
 
+#pragma omp taskwait
+
+  cudaMemcpy(qr, qr_d, sizeof(real_t) * nvec * ke, cudaMemcpyDeviceToHost);
+  cudaMemcpy(qi, qi_d, sizeof(real_t) * nvec * ke, cudaMemcpyDeviceToHost);
+  cudaMemcpy(qs, qs_d, sizeof(real_t) * nvec * ke, cudaMemcpyDeviceToHost);
+  cudaMemcpy(qg, qg_d, sizeof(real_t) * nvec * ke, cudaMemcpyDeviceToHost);
+  cudaMemcpy(qc, qc_d, sizeof(real_t) * nvec * ke, cudaMemcpyDeviceToHost);
+  cudaMemcpy(qv, qv_d, sizeof(real_t) * nvec * ke, cudaMemcpyDeviceToHost);
+  cudaMemcpy(t, t_d, sizeof(real_t) * nvec * ke, cudaMemcpyDeviceToHost);
+
   cudaFree(internals);
+
+  cudaFree(qr_d);
+  cudaFree(qi_d);
+  cudaFree(qs_d);
+  cudaFree(qg_d);
+  cudaFree(qc_d);
+  cudaFree(qv_d);
+  cudaFree(t_d);
+  cudaFree(rho_d);
+  cudaFree(dz_d);
+  cudaFree(p_d);
 }
 
 #endif // MU_ENABLE_GPU
