@@ -618,26 +618,19 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
                      sizeof(real_t) * nvec * (transfer_end - transfer),
                      cudaMemcpyHostToDevice);
         } else { // no more transfer, transfer back
-          cudaMemcpy(qr + pipeline * ivend, qr_d + pipeline * ivend,
-                     sizeof(real_t) * nvec * (pipeline_end - pipeline),
+          cudaMemcpy(qr, qr_d, sizeof(real_t) * nvec * pipeline,
                      cudaMemcpyDeviceToHost);
-          cudaMemcpy(qi + pipeline * ivend, qi_d + pipeline * ivend,
-                     sizeof(real_t) * nvec * (pipeline_end - pipeline),
+          cudaMemcpy(qi, qi_d, sizeof(real_t) * nvec * pipeline,
                      cudaMemcpyDeviceToHost);
-          cudaMemcpy(qs + pipeline * ivend, qs_d + pipeline * ivend,
-                     sizeof(real_t) * nvec * (pipeline_end - pipeline),
+          cudaMemcpy(qs, qs_d, sizeof(real_t) * nvec * pipeline,
                      cudaMemcpyDeviceToHost);
-          cudaMemcpy(qg + pipeline * ivend, qg_d + pipeline * ivend,
-                     sizeof(real_t) * nvec * (pipeline_end - pipeline),
+          cudaMemcpy(qg, qg_d, sizeof(real_t) * nvec * pipeline,
                      cudaMemcpyDeviceToHost);
-          cudaMemcpy(qc + pipeline * ivend, qc_d + pipeline * ivend,
-                     sizeof(real_t) * nvec * (pipeline_end - pipeline),
+          cudaMemcpy(qc, qc_d, sizeof(real_t) * nvec * pipeline,
                      cudaMemcpyDeviceToHost);
-          cudaMemcpy(qv + pipeline * ivend, qv_d + pipeline * ivend,
-                     sizeof(real_t) * nvec * (pipeline_end - pipeline),
+          cudaMemcpy(qv, qv_d, sizeof(real_t) * nvec * pipeline,
                      cudaMemcpyDeviceToHost);
-          cudaMemcpy(t + pipeline * ivend, t_d + pipeline * ivend,
-                     sizeof(real_t) * nvec * (pipeline_end - pipeline),
+          cudaMemcpy(t, t_d, sizeof(real_t) * nvec * pipeline,
                      cudaMemcpyDeviceToHost);
         }
 
