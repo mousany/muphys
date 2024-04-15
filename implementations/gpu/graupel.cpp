@@ -395,7 +395,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   size_t transfer = 0;
   size_t transfer_end = std::min(ke, pipeline + 1 + PIPELINE_SEGMENT_SIZE);
 
-#pragma omp parallel private(pipeline, pipeline_end)
+#pragma omp parallel private(pipeline, pipeline_end) num_threads(2)
   {
 #pragma omp single
     {
@@ -477,7 +477,7 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
             if (k < ke - 1) {
               size_t nexted_vec_index = (k + 1) * ivend + iv;
 
-              bool qc_qmin = qc_d[nexted_vec_index] > qmin;
+              qc_qmin = qc_d[nexted_vec_index] > qmin;
               qr_qmin = qr_d[nexted_vec_index] > qmin;
               qs_qmin = qs_d[nexted_vec_index] > qmin;
               qi_qmin = qi_d[nexted_vec_index] > qmin;
