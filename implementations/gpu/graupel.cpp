@@ -584,8 +584,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
           }
         }
 
-        size_t transfer = std::min(ke, pipeline + PIPELINE_SEGMENT_SIZE + 1);
-        size_t transfer_end = std::min(ke, transfer + PIPELINE_SEGMENT_SIZE);
+        transfer = std::min(ke, pipeline + PIPELINE_SEGMENT_SIZE + 1);
+        transfer_end = std::min(ke, transfer + PIPELINE_SEGMENT_SIZE);
         if (transfer < transfer_end) {
           cudaMemcpy(qr_d + transfer * ivend, qr + transfer * ivend,
                      sizeof(real_t) * nvec * (transfer_end - transfer),
@@ -632,6 +632,8 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
                      cudaMemcpyDeviceToHost);
           cudaMemcpy(t, t_d, sizeof(real_t) * nvec * pipeline,
                      cudaMemcpyDeviceToHost);
+
+          transfer = pipeline;
         }
 
 #pragma omp taskwait
@@ -640,20 +642,20 @@ void graupel(size_t nvec, size_t ke, size_t ivstart, size_t ivend,
   }
 
   // copy back the last segment
-  cudaMemcpy(qr + pipeline * ivend, qr_d + pipeline * ivend,
-             sizeof(real_t) * nvec * (ke - pipeline), cudaMemcpyDeviceToHost);
-  cudaMemcpy(qi + pipeline * ivend, qi_d + pipeline * ivend,
-             sizeof(real_t) * nvec * (ke - pipeline), cudaMemcpyDeviceToHost);
-  cudaMemcpy(qs + pipeline * ivend, qs_d + pipeline * ivend,
-             sizeof(real_t) * nvec * (ke - pipeline), cudaMemcpyDeviceToHost);
-  cudaMemcpy(qg + pipeline * ivend, qg_d + pipeline * ivend,
-             sizeof(real_t) * nvec * (ke - pipeline), cudaMemcpyDeviceToHost);
-  cudaMemcpy(qc + pipeline * ivend, qc_d + pipeline * ivend,
-             sizeof(real_t) * nvec * (ke - pipeline), cudaMemcpyDeviceToHost);
-  cudaMemcpy(qv + pipeline * ivend, qv_d + pipeline * ivend,
-             sizeof(real_t) * nvec * (ke - pipeline), cudaMemcpyDeviceToHost);
-  cudaMemcpy(t + pipeline * ivend, t_d + pipeline * ivend,
-             sizeof(real_t) * nvec * (ke - pipeline), cudaMemcpyDeviceToHost);
+  cudaMemcpy(qr + transfer * ivend, qr_d + transfer * ivend,
+             sizeof(real_t) * nvec * (ke - transfer), cudaMemcpyDeviceToHost);
+  cudaMemcpy(qi + transfer * ivend, qi_d + transfer * ivend,
+             sizeof(real_t) * nvec * (ke - transfer), cudaMemcpyDeviceToHost);
+  cudaMemcpy(qs + transfer * ivend, qs_d + transfer * ivend,
+             sizeof(real_t) * nvec * (ke - transfer), cudaMemcpyDeviceToHost);
+  cudaMemcpy(qg + transfer * ivend, qg_d + transfer * ivend,
+             sizeof(real_t) * nvec * (ke - transfer), cudaMemcpyDeviceToHost);
+  cudaMemcpy(qc + transfer * ivend, qc_d + transfer * ivend,
+             sizeof(real_t) * nvec * (ke - transfer), cudaMemcpyDeviceToHost);
+  cudaMemcpy(qv + transfer * ivend, qv_d + transfer * ivend,
+             sizeof(real_t) * nvec * (ke - transfer), cudaMemcpyDeviceToHost);
+  cudaMemcpy(t + transfer * ivend, t_d + transfer * ivend,
+             sizeof(real_t) * nvec * (ke - transfer), cudaMemcpyDeviceToHost);
 
   cudaFree(internals);
 

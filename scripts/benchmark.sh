@@ -19,7 +19,7 @@ if [ -z "$2" ] || [ $2 != "--double" ]; then
   MU_ENABLE_SINGLE=ON
   build_precision="single"
 else
-  MU_ENABLE_SINGLE=ON
+  MU_ENABLE_SINGLE=OFF
   build_precision="double"
 fi
 
