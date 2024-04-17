@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# set -e
+set -e
 
 function diffn-gpu {
   threshold=10e-11
@@ -48,7 +48,7 @@ fi
 
 function check {
   if [ $MU_IMPL == "gpu" ]; then
-    cdo infon -sub output.nc $1 
+    cdo infon -sub output.nc $1 | diffn-gpu
   else
     cdo diffn output.nc $1
   fi
