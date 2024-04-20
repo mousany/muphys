@@ -21,6 +21,8 @@ d15f88b1d54b923051e3b7b70a3353a13747cbd4
 4f26e3fcc204cb453aa92cf746856ee9c56e810b
 7. Move to GPU
 b9aec28649097344fc825444624581ebe8bc5d98
+    - `teams distribute parallel for` with block size of 128
+    - `num_teams` and `thread_limit` with block size of 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
 8. Use pinned memory for faster data transfer
 3587520ada8fea1c5d81148038f9a85554afcefd
 9. Pipeline the memory transfer
