@@ -24,4 +24,5 @@ fi
 
 if [[ "$2" == "$a2" ]]; then 
     module load nvhpc/23.7-gcc-11.2.0
+    export LD_LIBRARY_PATH=/home/b/b382789/muphys/lib:$LD_LIBRARY_PATH
 fi
